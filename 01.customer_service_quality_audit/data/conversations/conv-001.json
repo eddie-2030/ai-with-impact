@@ -1,0 +1,9 @@
+{
+  "conversation_id": "conv-001",
+  "agent_id": "A-1001",
+  "agent_name": "Taylor",
+  "started_at": "2025-10-15T09:30:00",
+  "channel": "chat",
+  "language": "en",
+  "transcript": "Customer: My package hasn\"t arrived. Agent: I\"m sorry for the frustration; let me verify your account and check. Thanks for your patience. I have issued a replacement and escalated with the carrier."
+}
