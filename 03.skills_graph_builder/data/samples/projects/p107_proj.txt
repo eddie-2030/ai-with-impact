@@ -1,0 +1,5 @@
+Collaborated across functions to deliver quarterly outcomes.
+Reduced manual toil with automation and templates.
+Hands-on experience with mlops in real projects.
+Hands-on experience with docker in real projects.
+Hands-on experience with numpy in real projects.

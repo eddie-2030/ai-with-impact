@@ -1,0 +1,9 @@
+- Built features leveraging pandas.
+- Built features leveraging neo4j.
+- Built features leveraging python.
+- Built features leveraging airflow.
+- Built features leveraging aws.
+- Built features leveraging fastapi.
+- Built features leveraging rag.
+- Presented insights to executives.
+- Mentored junior analysts.

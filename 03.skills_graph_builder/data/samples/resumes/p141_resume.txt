@@ -1,0 +1,9 @@
+- Built features leveraging docker.
+- Built features leveraging neo4j.
+- Built features leveraging scikit-learn.
+- Built features leveraging gcp.
+- Built features leveraging pandas.
+- Built features leveraging etl.
+- Built features leveraging mlops.
+- Presented insights to executives.
+- Mentored junior analysts.

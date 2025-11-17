@@ -1,0 +1,9 @@
+- Built features leveraging gcp.
+- Built features leveraging aws.
+- Built features leveraging prompt-engineering.
+- Built features leveraging azure.
+- Built features leveraging mlops.
+- Built features leveraging numpy.
+- Built features leveraging rag.
+- Presented insights to executives.
+- Mentored junior analysts.

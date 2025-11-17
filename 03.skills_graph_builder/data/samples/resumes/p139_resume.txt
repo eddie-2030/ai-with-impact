@@ -1,0 +1,8 @@
+- Built features leveraging etl.
+- Built features leveraging python.
+- Built features leveraging retrieval.
+- Built features leveraging scikit-learn.
+- Built features leveraging docker.
+- Built features leveraging langgraph.
+- Presented insights to executives.
+- Mentored junior analysts.

@@ -1,0 +1,9 @@
+- Built features leveraging numpy.
+- Built features leveraging azure.
+- Built features leveraging pandas.
+- Built features leveraging sql.
+- Built features leveraging docker.
+- Built features leveraging rag.
+- Built features leveraging langgraph.
+- Presented insights to executives.
+- Mentored junior analysts.

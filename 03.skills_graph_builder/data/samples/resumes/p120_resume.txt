@@ -1,0 +1,8 @@
+- Built features leveraging numpy.
+- Built features leveraging langchain.
+- Built features leveraging rag.
+- Built features leveraging prompt-engineering.
+- Built features leveraging pgvector.
+- Built features leveraging langgraph.
+- Presented insights to executives.
+- Mentored junior analysts.

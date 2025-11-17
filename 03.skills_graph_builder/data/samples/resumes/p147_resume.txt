@@ -1,0 +1,8 @@
+- Built features leveraging sql.
+- Built features leveraging etl.
+- Built features leveraging numpy.
+- Built features leveraging retrieval.
+- Built features leveraging aws.
+- Built features leveraging pgvector.
+- Presented insights to executives.
+- Mentored junior analysts.

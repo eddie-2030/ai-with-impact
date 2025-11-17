@@ -1,0 +1,8 @@
+Collaborated across functions to deliver quarterly outcomes.
+Reduced manual toil with automation and templates.
+Hands-on experience with numpy in real projects.
+Hands-on experience with langchain in real projects.
+Hands-on experience with rag in real projects.
+Hands-on experience with prompt-engineering in real projects.
+Hands-on experience with pgvector in real projects.
+Hands-on experience with langgraph in real projects.

@@ -1,0 +1,7 @@
+- Built features leveraging retrieval.
+- Built features leveraging aws.
+- Built features leveraging mlops.
+- Built features leveraging rag.
+- Built features leveraging neo4j.
+- Presented insights to executives.
+- Mentored junior analysts.

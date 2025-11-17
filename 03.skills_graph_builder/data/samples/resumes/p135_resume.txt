@@ -1,0 +1,8 @@
+- Built features leveraging fastapi.
+- Built features leveraging python.
+- Built features leveraging pgvector.
+- Built features leveraging aws.
+- Built features leveraging docker.
+- Built features leveraging gcp.
+- Presented insights to executives.
+- Mentored junior analysts.

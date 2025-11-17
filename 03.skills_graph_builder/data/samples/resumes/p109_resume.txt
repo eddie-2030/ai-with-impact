@@ -1,0 +1,8 @@
+- Built features leveraging fastapi.
+- Built features leveraging etl.
+- Built features leveraging retrieval.
+- Built features leveraging numpy.
+- Built features leveraging mlops.
+- Built features leveraging python.
+- Presented insights to executives.
+- Mentored junior analysts.

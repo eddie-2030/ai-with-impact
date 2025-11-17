@@ -1,0 +1,7 @@
+- Built features leveraging langgraph.
+- Built features leveraging sql.
+- Built features leveraging azure.
+- Built features leveraging python.
+- Built features leveraging pandas.
+- Presented insights to executives.
+- Mentored junior analysts.

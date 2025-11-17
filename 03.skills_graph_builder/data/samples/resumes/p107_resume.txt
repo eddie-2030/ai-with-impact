@@ -1,0 +1,5 @@
+- Built features leveraging mlops.
+- Built features leveraging docker.
+- Built features leveraging numpy.
+- Presented insights to executives.
+- Mentored junior analysts.

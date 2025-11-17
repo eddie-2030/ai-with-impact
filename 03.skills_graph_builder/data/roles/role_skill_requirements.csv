@@ -1,0 +1,15 @@
+role_id,title,level,skill_id,skill_label,weight,must_have
+r_data_analyst,Data Analyst,IC3,python,python,0.8,true
+r_data_analyst,Data Analyst,IC3,sql,sql,0.9,true
+r_data_analyst,Data Analyst,IC3,pandas,pandas,0.7,false
+r_data_analyst,Data Analyst,IC3,etl,etl,0.5,false
+r_ml_eng,ML Engineer,IC4,python,python,0.9,true
+r_ml_eng,ML Engineer,IC4,scikit-learn,scikit-learn,0.8,true
+r_ml_eng,ML Engineer,IC4,mlops,mlops,0.7,true
+r_ml_eng,ML Engineer,IC4,docker,docker,0.6,false
+r_ml_eng,ML Engineer,IC4,airflow,airflow,0.5,false
+r_llm_eng,LLM Engineer,IC5,python,python,0.9,true
+r_llm_eng,LLM Engineer,IC5,rag,rag,0.8,true
+r_llm_eng,LLM Engineer,IC5,prompt-engineering,prompt-engineering,0.7,true
+r_llm_eng,LLM Engineer,IC5,pgvector,pgvector,0.5,false
+r_llm_eng,LLM Engineer,IC5,langchain,langchain,0.5,false

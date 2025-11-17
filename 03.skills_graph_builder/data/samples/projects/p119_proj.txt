@@ -1,0 +1,8 @@
+Collaborated across functions to deliver quarterly outcomes.
+Reduced manual toil with automation and templates.
+Hands-on experience with azure in real projects.
+Hands-on experience with retrieval in real projects.
+Hands-on experience with fastapi in real projects.
+Hands-on experience with pandas in real projects.
+Hands-on experience with mlops in real projects.
+Hands-on experience with neo4j in real projects.

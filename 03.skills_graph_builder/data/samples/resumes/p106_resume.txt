@@ -1,0 +1,6 @@
+- Built features leveraging aws.
+- Built features leveraging etl.
+- Built features leveraging scikit-learn.
+- Built features leveraging azure.
+- Presented insights to executives.
+- Mentored junior analysts.

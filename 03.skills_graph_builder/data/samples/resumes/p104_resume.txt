@@ -1,0 +1,7 @@
+- Built features leveraging airflow.
+- Built features leveraging python.
+- Built features leveraging prompt-engineering.
+- Built features leveraging llmops.
+- Built features leveraging gcp.
+- Presented insights to executives.
+- Mentored junior analysts.

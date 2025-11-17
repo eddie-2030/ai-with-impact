@@ -1,0 +1,8 @@
+- Built features leveraging azure.
+- Built features leveraging pandas.
+- Built features leveraging mlops.
+- Built features leveraging airflow.
+- Built features leveraging langchain.
+- Built features leveraging scikit-learn.
+- Presented insights to executives.
+- Mentored junior analysts.

@@ -1,0 +1,7 @@
+- Built features leveraging llmops.
+- Built features leveraging langgraph.
+- Built features leveraging etl.
+- Built features leveraging pgvector.
+- Built features leveraging gcp.
+- Presented insights to executives.
+- Mentored junior analysts.

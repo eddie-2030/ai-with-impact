@@ -1,0 +1,7 @@
+- Built features leveraging pgvector.
+- Built features leveraging numpy.
+- Built features leveraging scikit-learn.
+- Built features leveraging mlops.
+- Built features leveraging aws.
+- Presented insights to executives.
+- Mentored junior analysts.

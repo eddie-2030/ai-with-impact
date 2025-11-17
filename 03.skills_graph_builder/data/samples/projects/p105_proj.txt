@@ -1,0 +1,6 @@
+Collaborated across functions to deliver quarterly outcomes.
+Reduced manual toil with automation and templates.
+Hands-on experience with airflow in real projects.
+Hands-on experience with etl in real projects.
+Hands-on experience with pgvector in real projects.
+Hands-on experience with neo4j in real projects.

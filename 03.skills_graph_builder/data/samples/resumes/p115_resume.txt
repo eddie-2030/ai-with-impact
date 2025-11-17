@@ -1,0 +1,8 @@
+- Built features leveraging azure.
+- Built features leveraging llmops.
+- Built features leveraging prompt-engineering.
+- Built features leveraging sql.
+- Built features leveraging rag.
+- Built features leveraging aws.
+- Presented insights to executives.
+- Mentored junior analysts.

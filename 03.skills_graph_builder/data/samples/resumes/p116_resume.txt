@@ -1,0 +1,9 @@
+- Built features leveraging azure.
+- Built features leveraging numpy.
+- Built features leveraging langchain.
+- Built features leveraging retrieval.
+- Built features leveraging docker.
+- Built features leveraging sql.
+- Built features leveraging airflow.
+- Presented insights to executives.
+- Mentored junior analysts.

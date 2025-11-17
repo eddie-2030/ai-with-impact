@@ -1,0 +1,8 @@
+- Built features leveraging docker.
+- Built features leveraging rag.
+- Built features leveraging retrieval.
+- Built features leveraging aws.
+- Built features leveraging sql.
+- Built features leveraging mlops.
+- Presented insights to executives.
+- Mentored junior analysts.

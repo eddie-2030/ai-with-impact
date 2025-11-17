@@ -1,0 +1,8 @@
+- Built features leveraging pandas.
+- Built features leveraging langchain.
+- Built features leveraging pgvector.
+- Built features leveraging azure.
+- Built features leveraging etl.
+- Built features leveraging numpy.
+- Presented insights to executives.
+- Mentored junior analysts.

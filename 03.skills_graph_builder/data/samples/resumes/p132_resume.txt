@@ -1,0 +1,5 @@
+- Built features leveraging rag.
+- Built features leveraging langchain.
+- Built features leveraging scikit-learn.
+- Presented insights to executives.
+- Mentored junior analysts.

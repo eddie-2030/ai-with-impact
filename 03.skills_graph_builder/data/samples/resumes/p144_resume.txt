@@ -1,0 +1,7 @@
+- Built features leveraging numpy.
+- Built features leveraging docker.
+- Built features leveraging llmops.
+- Built features leveraging fastapi.
+- Built features leveraging neo4j.
+- Presented insights to executives.
+- Mentored junior analysts.

@@ -1,0 +1,11 @@
+skill,title,hours,url
+python,Python for Data Analysis,8,https://example.com/python-data
+sql,SQL for Analytics,6,https://example.com/sql-analytics
+pandas,Practical Pandas,5,https://example.com/pandas
+mlops,MLOps Foundations,6,https://example.com/mlops
+llmops,LLMOps Patterns,6,https://example.com/llmops
+rag,Building RAG Systems,7,https://example.com/rag
+prompt-engineering,Prompt Engineering Essentials,4,https://example.com/prompt
+scikit-learn,Applied scikit-learn,6,https://example.com/sklearn
+airflow,Airflow for Data Pipelines,6,https://example.com/airflow
+docker,Containerization with Docker,5,https://example.com/docker

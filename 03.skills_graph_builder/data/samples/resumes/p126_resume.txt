@@ -1,0 +1,6 @@
+- Built features leveraging python.
+- Built features leveraging aws.
+- Built features leveraging numpy.
+- Built features leveraging llmops.
+- Presented insights to executives.
+- Mentored junior analysts.

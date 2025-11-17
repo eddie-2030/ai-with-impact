@@ -1,0 +1,7 @@
+- Built features leveraging langgraph.
+- Built features leveraging numpy.
+- Built features leveraging langchain.
+- Built features leveraging etl.
+- Built features leveraging python.
+- Presented insights to executives.
+- Mentored junior analysts.
