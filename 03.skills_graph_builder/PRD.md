@@ -137,7 +137,7 @@ Transform talent management from reactive to proactive by providing:
 
 ### Persona 1: Talent Development Manager
 
-**Name**: Priya Patel  
+**Name**: Jane Smith  
 **Role**: Director of Talent Development  
 **Goals**:
 - Create personalized development plans for 500+ employees
@@ -168,7 +168,7 @@ Transform talent management from reactive to proactive by providing:
 
 ### Persona 2: HR Business Partner
 
-**Name**: James Rodriguez  
+**Name**: John Doe  
 **Role**: Senior HR Business Partner  
 **Goals**:
 - Fill open positions quickly with internal candidates
@@ -191,7 +191,7 @@ Transform talent management from reactive to proactive by providing:
 
 ### Persona 3: Individual Contributor
 
-**Name**: Alex Kim  
+**Name**: Mike Johnson  
 **Role**: Software Engineer  
 **Goals**:
 - Understand career growth opportunities
