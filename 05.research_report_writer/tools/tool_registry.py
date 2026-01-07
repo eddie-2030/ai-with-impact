@@ -33,3 +33,4 @@ class ToolRegistry:
 # Global tool registry instance
 tool_registry = ToolRegistry()
 
+

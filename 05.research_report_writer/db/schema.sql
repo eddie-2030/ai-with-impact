@@ -82,3 +82,4 @@ CREATE INDEX IF NOT EXISTS idx_verifications_source ON source_verifications(sour
 CREATE INDEX IF NOT EXISTS idx_reports_request ON research_reports(research_request_id);
 CREATE INDEX IF NOT EXISTS idx_agent_executions_request ON agent_executions(research_request_id);
 
+

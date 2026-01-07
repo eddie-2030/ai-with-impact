@@ -70,3 +70,4 @@ class WebScraperTool(BaseTool):
                 "success": False
             }
 
+

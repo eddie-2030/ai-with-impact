@@ -82,3 +82,4 @@ curl -X POST http://localhost:8000/research \
 - Database storage enables historical research tracking
 - Supports both real-time and batch research requests
 
+

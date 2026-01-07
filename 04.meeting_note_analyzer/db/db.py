@@ -142,3 +142,4 @@ def insert_participant_contribution(session: Session, contribution_data: dict) -
     
     return contribution
 
+

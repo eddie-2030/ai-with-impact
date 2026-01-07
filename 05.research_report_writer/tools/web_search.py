@@ -36,3 +36,4 @@ class WebSearchTool(BaseTool):
             print(f"Web search error: {e}")
             return []
 
+

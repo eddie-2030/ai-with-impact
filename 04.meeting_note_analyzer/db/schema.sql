@@ -52,3 +52,4 @@ CREATE INDEX IF NOT EXISTS idx_decisions_meeting ON decisions(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_topics_meeting ON topics(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
 
+
