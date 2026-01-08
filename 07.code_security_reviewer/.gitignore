@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Data files (keep structure, ignore content)
+data/test_cases/**/*.py
+data/test_cases/**/*.sql
+!data/test_cases/**/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+artifacts/
+*.pkl
+*.pickle
+.cache/
+models/  # ML models
+
+# Sensitive data
+*.csv
+!data/samples/*.csv
+
