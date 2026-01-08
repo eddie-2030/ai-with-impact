@@ -2,7 +2,7 @@
 # This code contains hard-coded API keys and passwords
 
 # VULNERABLE: Hard-coded API key
-API_KEY = "example_api_key_1234567890abcdefghijklmnop"
+API_KEY = "example_api_key_12345_do_not_use_in_production"
 
 # VULNERABLE: Hard-coded password
 DATABASE_PASSWORD = "MySecretPassword123!"
