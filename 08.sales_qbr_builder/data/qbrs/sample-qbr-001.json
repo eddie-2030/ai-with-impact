@@ -1,0 +1,8 @@
+{
+  "account_id": "acc-001",
+  "account_name": "Acme Corp",
+  "quarter": "Q1-2025",
+  "period_start": "2025-01-01",
+  "period_end": "2025-03-31",
+  "goals": ["Renewal", "Expansion", "Product Adoption"]
+}
