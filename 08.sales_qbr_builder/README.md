@@ -9,7 +9,7 @@ This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.t
 ## Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.13+ (recommended)
 - OpenAI API Key
 - PostgreSQL (optional, for persistent storage)
 - Virtual environment (recommended)
@@ -18,7 +18,7 @@ This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.t
 
 ```bash
 # Create virtual environment
-python -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
@@ -27,7 +27,7 @@ pip install -r requirements.txt
 # Set up environment variables
 cp .env.example .env
 # Edit .env and add your OpenAI API key:
-# OPENAI_API_KEY=sk-proj-your-key-here
+# OPENAI_API_KEY=your-openai-api-key-here
 ```
 
 ### Run the Application
@@ -35,20 +35,20 @@ cp .env.example .env
 ```bash
 # Terminal 1: Start API server
 export OPENAI_API_KEY=your-key-here
-uvicorn api.server:app --reload --port 8000
+uvicorn api.server:app --port 8001
 
 # Terminal 2: Start Streamlit dashboard
 export OPENAI_API_KEY=your-key-here
-streamlit run dashboard/app.py
+streamlit run dashboard/app.py --server.port 8501
 ```
 
-- API: http://localhost:8000/docs
+- API: http://127.0.0.1:8001/docs
 - Dashboard: http://localhost:8501
 
 ## Generate a QBR Pack (Example)
 
 ```bash
-curl -X POST http://localhost:8000/qbr/generate \
+curl -X POST http://127.0.0.1:8001/qbr/generate \
   -H 'Content-Type: application/json' \
   -d '{
     "account_id": "acc-001",
@@ -72,15 +72,25 @@ curl -X POST http://localhost:8000/qbr/generate \
 ## Architecture
 
 - **API Layer**: FastAPI REST API for QBR operations
-- **Analysis Layer**: LLM-powered insight generation with schema-constrained outputs
+- **Agent Runtime (Orchestrator)**: `orchestrator/qbr_orchestrator.py` implements the PRD workflow as an explicit step graph (plan → fetch MCP data → aggregate/validate → generate → finalize), emitting step events for auditability.
+- **LangGraph**: If `langgraph` is installed (see `requirements.txt`), the orchestrator runs as a LangGraph `StateGraph`. If not installed, it falls back to a sequential runner while preserving the same step trace shape.
+- **Analysis Layer**: LLM-powered insight generation with schema-constrained outputs (Pydantic validation of OpenAI JSON; heuristic fallback if OpenAI unavailable)
 - **Data Layer**: PostgreSQL database for QBR storage
-- **MCP Integration**: MCP servers for CRM, Analytics, and Support data (read-only)
+- **MCP Integration**: `tools/mcp_clients.py` is currently a mocked MCP client layer (scenario-driven demo data). Replace these with real MCP server calls in Phase 2.
 - **Dashboard**: Streamlit web interface for QBR generation and review
 
 ## Notes
 
 - Requires OpenAI API key for LLM functionality
-- MCP servers can be mocked for development (see `tools/` directory)
+- MCP servers are mocked for development (see `tools/mcp_clients.py`)
 - Supports both real-time QBR generation and batch processing
 - Database storage enables historical analysis and trend tracking
 - Human-in-the-loop approval ensures quality and accuracy
+
+## Orchestrator Trace (Agent Runtime Events)
+
+After generating a pack, you can retrieve the agent runtime trace:
+
+```bash
+curl http://127.0.0.1:8001/qbr/<pack_id>/events
+```

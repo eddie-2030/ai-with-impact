@@ -93,6 +93,25 @@ CREATE TABLE IF NOT EXISTS metrics (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Orchestrator runtime / audit log
+CREATE TABLE IF NOT EXISTS qbr_runs (
+    id SERIAL PRIMARY KEY,
+    request_id VARCHAR(64),
+    pack_id VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'running', -- running, completed, failed
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS qbr_events (
+    id SERIAL PRIMARY KEY,
+    qbr_run_id INTEGER,
+    step VARCHAR(64),
+    event_type VARCHAR(32), -- started, completed, error, checkpoint
+    payload_json JSONB,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_qbr_requests_account ON qbr_requests(account_id);
 CREATE INDEX IF NOT EXISTS idx_qbr_requests_status ON qbr_requests(status);
@@ -105,3 +124,6 @@ CREATE INDEX IF NOT EXISTS idx_data_sources_type ON data_sources(source_type);
 CREATE INDEX IF NOT EXISTS idx_action_items_pack ON action_items(qbr_pack_id);
 CREATE INDEX IF NOT EXISTS idx_approvals_pack ON approvals(qbr_pack_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_pack ON metrics(qbr_pack_id);
+CREATE INDEX IF NOT EXISTS idx_qbr_runs_pack ON qbr_runs(pack_id);
+CREATE INDEX IF NOT EXISTS idx_qbr_events_run ON qbr_events(qbr_run_id);
+CREATE INDEX IF NOT EXISTS idx_qbr_events_step ON qbr_events(step);

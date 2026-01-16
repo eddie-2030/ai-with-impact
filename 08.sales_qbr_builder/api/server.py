@@ -6,12 +6,14 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from db.db import (
     session_scope, init_db, upsert_qbr_request, create_qbr_pack,
-    insert_insight, insert_data_source, insert_action_item, insert_approval, insert_metric
+    insert_insight, insert_data_source, insert_action_item, insert_approval, insert_metric,
+    create_qbr_run, insert_qbr_event, update_qbr_run_status
 )
 from models.qbr_analyzer import generate_qbr_insights, aggregate_qbr_data
-from tools.mcp_clients import fetch_crm_data, fetch_analytics_data, fetch_support_data
+from orchestrator.qbr_orchestrator import QBROrchestrator, QBRContext
 import os
 import uuid
+import traceback
 
 app = FastAPI(title="Sales/CS QBR Pack Builder API", version="1.0")
 
@@ -111,23 +113,68 @@ async def process_qbr_generation(
     goals: List[str]
 ):
     """Background task to process QBR generation"""
+    qbr_run_id: int | None = None
     try:
-        # Fetch data from MCP servers (parallel)
-        crm_data = fetch_crm_data(account_id, period_start, period_end)
-        analytics_data = fetch_analytics_data(account_id, period_start, period_end)
-        support_data = fetch_support_data(account_id, period_start, period_end)
-        
-        # Aggregate and validate data
-        aggregated_data = aggregate_qbr_data(crm_data, analytics_data, support_data)
-        
-        # Generate insights using LLM
-        insights_result = generate_qbr_insights(
+        # Agent Runtime / Orchestrator (graph-style workflow)
+        ctx = QBRContext(
+            request_id=request_id,
+            pack_id=pack_id,
+            account_id=account_id,
             account_name=account_name,
-            aggregated_data=aggregated_data,
-            goals=goals,
             period_start=period_start,
-            period_end=period_end
+            period_end=period_end,
+            goals=goals,
         )
+        orchestrator = QBROrchestrator(ctx)
+
+        # Create a durable run record + write step events for auditability
+        with session_scope() as s:
+            run = create_qbr_run(s, request_id=request_id, pack_id=pack_id)
+            qbr_run_id = run.id
+
+        # Execute orchestration and persist events.
+        # Note: we still do the primary persistence (pack/insights/action items) below,
+        # but this records step-level traces aligned with the PRD workflow diagram.
+        result: dict[str, Any] | None = None
+        gen = orchestrator.run()
+        try:
+            while True:
+                try:
+                    ev = next(gen)
+                    if qbr_run_id is not None:
+                        with session_scope() as s:
+                            insert_qbr_event(
+                                s,
+                                qbr_run_id=qbr_run_id,
+                                step=ev.step,
+                                event_type=ev.event_type,
+                                payload={"ts": ev.ts.isoformat(), **(ev.payload or {})},
+                            )
+                except StopIteration as stop:
+                    result = stop.value
+                    break
+        except Exception as e:
+            # Persist orchestrator error for debugging
+            if qbr_run_id is not None:
+                with session_scope() as s:
+                    insert_qbr_event(
+                        s,
+                        qbr_run_id=qbr_run_id,
+                        step="orchestrator",
+                        event_type="error",
+                        payload={
+                            "error": str(e),
+                            "traceback": traceback.format_exc(),
+                        },
+                    )
+                    update_qbr_run_status(s, qbr_run_id, "failed")
+            raise
+
+        crm_data = (result or {}).get("crm_data", {})
+        analytics_data = (result or {}).get("analytics_data", {})
+        support_data = (result or {}).get("support_data", {})
+        aggregated_data = (result or {}).get("aggregated_data", {})
+        insights_result = (result or {}).get("insights_result", {})
         
         # Store results in database
         with session_scope() as s:
@@ -204,6 +251,9 @@ async def process_qbr_generation(
             request = s.query(QBRRequest).filter_by(request_id=request_id).first()
             if request:
                 request.status = "completed"
+
+            if qbr_run_id is not None:
+                update_qbr_run_status(s, qbr_run_id, "completed")
     
     except Exception as e:
         # Update status to failed
@@ -215,6 +265,20 @@ async def process_qbr_generation(
             pack = s.query(QBRPack).filter_by(pack_id=pack_id).first()
             if pack:
                 pack.status = "failed"
+                # Store error message for quick visibility in UI
+                pack.executive_summary = f"Generation failed: {e}"
+            if qbr_run_id is not None:
+                update_qbr_run_status(s, qbr_run_id, "failed")
+                insert_qbr_event(
+                    s,
+                    qbr_run_id=qbr_run_id,
+                    step="orchestrator",
+                    event_type="error",
+                    payload={
+                        "error": str(e),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
 
 @app.get("/qbr/{pack_id}")
 async def get_qbr(pack_id: str) -> Dict[str, Any]:
@@ -273,6 +337,35 @@ async def get_qbr(pack_id: str) -> Dict[str, Any]:
             ],
             "created_at": pack.created_at.isoformat(),
             "updated_at": pack.updated_at.isoformat()
+        }
+    finally:
+        session.close()
+
+
+@app.get("/qbr/{pack_id}/events")
+async def get_qbr_events(pack_id: str) -> Dict[str, Any]:
+    """Get orchestrator run events (agent runtime trace) for a QBR pack."""
+    from db.db import SessionLocal, QBRRun, QBREvent
+
+    session = SessionLocal()
+    try:
+        run = session.query(QBRRun).filter_by(pack_id=pack_id).order_by(QBRRun.id.desc()).first()
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found for pack")
+        events = session.query(QBREvent).filter_by(qbr_run_id=run.id).order_by(QBREvent.id.asc()).all()
+        return {
+            "pack_id": pack_id,
+            "run": {"id": run.id, "status": run.status, "created_at": run.created_at.isoformat()},
+            "events": [
+                {
+                    "id": e.id,
+                    "step": e.step,
+                    "event_type": e.event_type,
+                    "payload": e.payload_json,
+                    "created_at": e.created_at.isoformat(),
+                }
+                for e in events
+            ],
         }
     finally:
         session.close()

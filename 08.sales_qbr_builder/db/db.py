@@ -2,17 +2,66 @@
 from __future__ import annotations
 import os
 from contextlib import contextmanager
-from sqlalchemy import create_engine, Column, Integer, String, Text, Date, DateTime, Float, ARRAY, JSON
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, Column, Integer, String, Text, Date, DateTime, Float, JSON
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/qbr_builder")
+def _default_sqlite_url() -> str:
+    # Store sqlite DB in the project root (08.sales_qbr_builder/qbr_builder.sqlite)
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    sqlite_path = os.path.join(project_root, "qbr_builder.sqlite")
+    return f"sqlite+pysqlite:///{sqlite_path}"
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def _normalize_database_url(url: str) -> str:
+    """
+    Normalize postgres URLs to use psycopg (v3) driver for better Python 3.13+ support.
+    """
+    if url.startswith("postgres://"):
+        # common alias; SQLAlchemy prefers postgresql
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        # Prefer psycopg v3 driver (psycopg)
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+def _create_engine_with_fallback() -> "Any":
+    """
+    Create SQLAlchemy engine.
+    - If DATABASE_URL points to Postgres but the driver isn't installed (common on Python 3.13),
+      fall back to SQLite so the API can still run.
+    """
+    raw_url = os.getenv("DATABASE_URL", _default_sqlite_url())
+    url = _normalize_database_url(raw_url)
+
+    try:
+        if url.startswith("sqlite"):
+            return create_engine(
+                url,
+                connect_args={"check_same_thread": False},
+                pool_pre_ping=True,
+            )
+        return create_engine(url, pool_pre_ping=True)
+    except ModuleNotFoundError as e:
+        # Typical error: No module named 'psycopg2' or missing postgres driver
+        fallback_url = _default_sqlite_url()
+        return create_engine(
+            fallback_url,
+            connect_args={"check_same_thread": False},
+            pool_pre_ping=True,
+        )
+
+_engine = None
+SessionLocal = sessionmaker(autocommit=False, autoflush=False)
 Base = declarative_base()
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = _create_engine_with_fallback()
+        SessionLocal.configure(bind=_engine)
+    return _engine
 
 # Models
 class QBRRequest(Base):
@@ -25,7 +74,8 @@ class QBRRequest(Base):
     quarter = Column(String(16))
     period_start = Column(Date)
     period_end = Column(Date)
-    goals = Column(ARRAY(Text))
+    # Store as JSON for cross-db compatibility (SQLite fallback + Postgres)
+    goals = Column(JSON)
     status = Column(String(32), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -110,13 +160,38 @@ class Metric(Base):
     trend = Column(String(16))
     created_at = Column(DateTime, default=datetime.utcnow)
 
+# Orchestrator runtime / audit log tables
+class QBRRun(Base):
+    __tablename__ = "qbr_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(String(64), index=True)
+    pack_id = Column(String(64), index=True)
+    status = Column(String(32), default="running", index=True)  # running | completed | failed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class QBREvent(Base):
+    __tablename__ = "qbr_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    qbr_run_id = Column(Integer, index=True)
+    step = Column(String(64), index=True)
+    event_type = Column(String(32), index=True)  # started | completed | error | checkpoint
+    payload_json = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def init_db():
     """Initialize database tables"""
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=get_engine())
 
 @contextmanager
 def session_scope():
     """Provide a transactional scope around a series of operations"""
+    # Ensure engine is initialized and SessionLocal bound
+    get_engine()
     session = SessionLocal()
     try:
         yield session
@@ -174,3 +249,23 @@ def insert_metric(session: Session, data: Dict[str, Any]) -> Metric:
     metric = Metric(**data)
     session.add(metric)
     return metric
+
+
+def create_qbr_run(session: Session, request_id: str, pack_id: str) -> QBRRun:
+    run = QBRRun(request_id=request_id, pack_id=pack_id, status="running")
+    session.add(run)
+    session.flush()
+    return run
+
+
+def update_qbr_run_status(session: Session, qbr_run_id: int, status: str) -> None:
+    run = session.query(QBRRun).filter_by(id=qbr_run_id).first()
+    if run:
+        run.status = status
+        run.updated_at = datetime.utcnow()
+
+
+def insert_qbr_event(session: Session, qbr_run_id: int, step: str, event_type: str, payload: Dict[str, Any]) -> QBREvent:
+    ev = QBREvent(qbr_run_id=qbr_run_id, step=step, event_type=event_type, payload_json=payload)
+    session.add(ev)
+    return ev
