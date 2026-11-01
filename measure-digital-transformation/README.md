@@ -8,5 +8,6 @@ All data in these folders are synthetic, generated to illustrate the methods. Th
 |---|---|---|
 | Adoption Is Not Impact: How to Prove a GenAI Rollout Actually Worked | [A01_adoption-is-not-impact](A01_adoption-is-not-impact) | Difference-in-differences; staggered-adoption (group-time) estimators |
 | Who Audits the Agents? Human Oversight as a Measurable Capability | [C01_who-audits-the-agents](C01_who-audits-the-agents) | Chance-corrected agreement (Cohen's kappa, Krippendorff's alpha); golden-set accuracy |
+| Don't Launch Everywhere at Once: Who Benefits from AI? | [B06_don-t-launch-everywhere-at-once](B06_don-t-launch-everywhere-at-once) | Heterogeneous effects: pre-specified interactions, DR-learner with random forest, Holm correction |
 
-Each folder's README explains how to run it: `python3 data/generate_data.py`, then the R and Python analysis scripts.
+Each folder's README explains how to run it: `python3 data/generate_data.py`, then the R and Python analysis scripts (B06 also has `python3 python/merge_results.py`).
