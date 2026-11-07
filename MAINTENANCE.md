@@ -6,7 +6,7 @@ This is the master record for the daily modernization of the eight projects in t
 
 - Daily run: 09:00 America/Detroit, including weekends, beginning November 4, 2026. The first weekly maintenance batch remains recorded below.
 - App automation: Daily AI project modernization (existing ID: weekly-ai-project-maintenance), continuing in the same Codex chat.
-- Pending delivery: branch codex/maintenance-2026-11-02 contains independently reviewed 04/06 fixes and passing tests. GitHub CLI authentication is verified, but GitHub returned HTTP 500 for two push attempts on November 5. No PR or merge has occurred.
+- Pending delivery: Project 01 branch codex/maintenance-2026-11-06-project-01 is published as [PR #2](https://github.com/eddie-2030/ai-with-impact/pull/2). The earlier 04/06 branch remains local pending publication.
 - Core roles: maintainer (PM and TPM), AI application engineer, and independent QA/reviewer.
 - Specialists when needed: security and reliability, data science, and architecture/integrations.
 - Use at most the available concurrency; start with the maintainer and up to three workers. Pass concise task context and coordinate ownership of shared files.
@@ -20,12 +20,12 @@ As of November 7, 2026: **0 of 8 overhauls synced**. Projects 01, 04, and 06 hav
 
 | Project | Overhaul stage | Main change or opportunity | Evidence | GitHub / local sync | Next action |
 | --- | --- | --- | --- | --- | --- |
-| 01 Customer Service Quality Audit | Ready locally · PR pending | Align dashboard score columns with the database model and provide runnable setup and batch guidance | Dashboard query regression 1 passed; compileall and diff check passed; Docker/PostgreSQL end-to-end unrun | Local branch codex/maintenance-2026-11-06-project-01; GitHub push pending | Publish after retrying GitHub's HTTP 500 failure; review hosted checks |
+| 01 Customer Service Quality Audit | PR open · #2 | Align dashboard score columns with the database model and provide runnable setup and batch guidance | Dashboard query regression 1 passed; compileall and diff check passed; independent review passed; Docker/PostgreSQL end-to-end unrun | [PR #2](https://github.com/eddie-2030/ai-with-impact/pull/2); local branch codex/maintenance-2026-11-06-project-01 at 1efcb94 | Review CI and await approval; do not merge without user approval |
 | 02 Procurement Contract Analyzer | Queued | Isolate uploads that currently share fixed temporary paths | Syntax passed; runtime baseline pending | No PR | Enforce upload limits and test concurrent PDF/DOCX requests |
 | 03 Skills Graph Builder | Queued | Replace silent random-vector fallback with explicit provider failure | Syntax passed; runtime baseline pending | No PR | Verify deterministic recommendations and degraded behavior |
-| 04 Meeting Note Analyzer | Queued · prior fix verified | Persistence helpers now flush IDs within the transaction | 6 tests passed; commit 3859152 | Prior fix: local only; GitHub server error blocked push | Publish prior fix, then address model errors and repeat analysis |
+| 04 Meeting Note Analyzer | Queued · prior fix verified | Persistence helpers now flush IDs within the transaction | 6 tests passed; commit 3859152 | Prior fix: local only | Publish prior fix, then address model errors and repeat analysis |
 | 05 Research Report Writer | Queued | Replace placeholder search results with a source-backed provider interface | Syntax passed; runtime baseline pending | No PR | Verify source provenance and explicit fixture mode |
-| 06 Banking Fraud Detection | Queued · prior fix verified | Actual account context and UTC event-time windows reach the alert policy | 17 tests passed; commits 3859152 and 3eba5be | Prior fix: local only; GitHub server error blocked push | Publish prior fix; evaluate calibration when labeled data is available |
+| 06 Banking Fraud Detection | Queued · prior fix verified | Actual account context and UTC event-time windows reach the alert policy | 17 tests passed; commits 3859152 and 3eba5be | Prior fix: local only | Publish prior fix; evaluate calibration when labeled data is available |
 | 07 Code Security Reviewer | Queued | Validate proposed fixes before labeling them safe | Syntax passed; runtime baseline pending | No PR | Add labeled fixtures and verify patch validation |
 | 08 Sales QBR Builder | Queued | Run the graph once per QBR | Syntax passed; runtime baseline pending | No PR | Verify each stage runs once and produces a coherent trace |
 
@@ -76,17 +76,18 @@ These changes are verified in isolated local branches and have not been publishe
 | 2026-11-02 | 04 / P04-001 | Flush generated parent/child IDs inside the transaction before callers use them | Original: 3 failed, 3 passed. Fixed: 6 passed against real temporary PostgreSQL, including API, batch, and rollback | 3859152; publication blocked, no PR |
 | 2026-11-02 | 06 / P06-001 and P06-003 | Load real account context, preserve existing attributes, and use UTC event-time windows | Final: 17 passed; seeded anomaly yields the unchanged 71.5/medium policy and persists/retrieves its alert | 3859152 and 3eba5be; publication blocked, no PR |
 | 2026-11-02 | Shared test foundation | Add focused PostgreSQL CI matrix for 04/06 with pinned action commits and no provider credentials | actionlint v1.7.12 passed; both suites also passed in TEST_DATABASE_URL mode. Hosted execution not run | 3859152; publication blocked, no PR |
-| 2026-11-07 | 01 / P01-001 | Use database-backed score columns, calculate overall mean, add SQLite regression, protect Docker context from `.env`, repair quick-start and batch instructions | Dashboard query: 1 passed; Python compileall and `git diff --check` passed. Docker unavailable; full metrics discovery blocked by missing scikit-learn. Independent review caught and fixed a batch-copy instruction and Docker secret-context issue | codex/maintenance-2026-11-06-project-01; local commit pending |
+| 2026-11-07 | 01 / P01-001 | Use database-backed score columns, calculate overall mean, add SQLite regression, protect Docker context from `.env`, repair quick-start and batch instructions | Dashboard query: 1 passed; Python compileall and `git diff --check` passed. Docker unavailable; full metrics discovery blocked by missing scikit-learn. Independent review passed | 1efcb94; [PR #2](https://github.com/eddie-2030/ai-with-impact/pull/2) |
 
 ## Run history
 
-November 2 completed a verified local batch for 04/06. GitHub authentication is now verified, but pushes returned an internal server error twice on November 5. No PR or merge has occurred. The original checkout has not received application code.
+November 2 completed a verified local batch for 04/06. Those changes remain in the local branch codex/maintenance-2026-11-02 and need a focused PR. Project 01 was published successfully in PR #2 on November 7. No changes have merged. The original checkout has not received application code.
 
 | Date | Work completed | Verification | Next focus |
 | --- | --- | --- | --- |
 | 2026-11-01 | Read-only inventory and parallel static diagnosis; master tracker initialized | Source inspection; direct-dependency advisory lookup. No runtime tests or code fixes completed | 04 and 06 |
 | 2026-11-02 | Checked all eight projects; implemented and independently reviewed scoped fixes for 04/06; added focused CI | 24 tests passed in total (01: 1, 04: 6, 06: 17); actionlint and dependency compatibility passed. 12 of 44 direct pins still match advisories requiring applicability review. GitHub authentication blocks publication | 01 and 02; first reconcile the pending maintenance branch |
 | 2026-11-03 | Set up the daily single-project workflow and master progress chart; retained the November 2 branch and evidence | Schedule and tracker setup only; no new application fixes or tests | 01; reconcile pending 04/06 publication |
-| 2026-11-06–07 | Diagnosed and fixed project 01 dashboard/database contract; revised setup and batch docs; added dashboard regression and Docker build-context protection; independent review completed | 1 targeted query test passed; compileall and diff check passed. Full environment and hosted checks not run. Local commit pending | 02; retry publishing 04/06 and 01 branches |
+| 2026-11-06–07 | Diagnosed and fixed project 01 dashboard/database contract; revised setup and batch docs; added dashboard regression and Docker build-context protection; independent review completed | 1 targeted query test passed; compileall and diff check passed. Full environment and hosted checks not run. PR #2 open | 02; publish 04/06 branch |
+| 2026-11-07 | Published Project 01 overhaul for review | PR #2 opened; local commit 1efcb94; GitHub push succeeded | 02; publish 04/06 branch |
 
 For each scheduled run, record the reviewed commit, focus project, checks passed/failed/not run, main changes, open PRs, blockers, and next actions. Record total agent tokens, model/provider costs, elapsed time to a reviewable PR, and repair rounds when available; use unavailable rather than estimated values when telemetry is missing.
