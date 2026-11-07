@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import sqlalchemy as sa
 import streamlit as st
+from dashboard.queries import load_dashboard_data
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/cxqa")
 engine = sa.create_engine(DATABASE_URL)
@@ -13,24 +14,7 @@ st.title("CX QA – Scores & Insights")
 @st.cache_data(ttl=60)
 def load_data():
     with engine.connect() as con:
-        query = """
-        SELECT 
-            c.conv_ext_id,
-            c.started_at,
-            c.channel,
-            c.language,
-            a.name as agent_name,
-            s.overall_score,
-            s.empathy_score,
-            s.professionalism_score,
-            s.solution_effectiveness_score,
-            s.created_at as scored_at
-        FROM conversations c
-        JOIN agents a ON c.agent_id = a.id
-        LEFT JOIN scores s ON c.id = s.conversation_id
-        ORDER BY c.started_at DESC
-        """
-        return pd.read_sql(query, con)
+        return load_dashboard_data(con)
 
 # Load data
 try:
@@ -47,8 +31,8 @@ try:
         st.metric("Avg Overall Score", f"{avg_score:.2f}" if avg_score > 0 else "N/A")
     
     with col3:
-        avg_empathy = df['empathy_score'].mean() if not df.empty else 0
-        st.metric("Avg Empathy Score", f"{avg_empathy:.2f}" if avg_empathy > 0 else "N/A")
+        avg_friendliness = df['friendliness_score'].mean() if not df.empty else 0
+        st.metric("Avg Friendliness Score", f"{avg_friendliness:.2f}" if avg_friendliness > 0 else "N/A")
     
     with col4:
         scored_count = df['overall_score'].notna().sum()
@@ -62,7 +46,7 @@ try:
         
         with col1:
             if df['overall_score'].notna().any():
-                st.bar_chart(df[['overall_score', 'empathy_score', 'professionalism_score', 'solution_effectiveness_score']].mean())
+                st.bar_chart(df[['overall_score', 'professionalism_score', 'friendliness_score', 'resolution_effectiveness_score']].mean())
         
         with col2:
             channel_counts = df['channel'].value_counts()
@@ -77,7 +61,7 @@ try:
         display_df['scored_at'] = pd.to_datetime(display_df['scored_at']).dt.strftime('%Y-%m-%d %H:%M')
         
         # Round scores to 2 decimal places
-        score_columns = ['overall_score', 'empathy_score', 'professionalism_score', 'solution_effectiveness_score']
+        score_columns = ['overall_score', 'professionalism_score', 'friendliness_score', 'resolution_effectiveness_score']
         for col in score_columns:
             if col in display_df.columns:
                 display_df[col] = display_df[col].round(2)
@@ -88,4 +72,4 @@ try:
 
 except Exception as e:
     st.error(f"Error loading data: {str(e)}")
-    st.info("Make sure the database is running and contains data.") 
+    st.info("Make sure the database is running and contains data.")
