@@ -1,5 +1,7 @@
 # Example cURL requests
 
+Run these commands from the project directory. Ingestion sends template clauses to OpenAI and analysis sends the uploaded contract. Both can incur charges. The README includes an offline smoke check.
+
 # 1) Ingest / index templates (with LLM embeddings)
 curl -X POST http://localhost:8000/ingest
 

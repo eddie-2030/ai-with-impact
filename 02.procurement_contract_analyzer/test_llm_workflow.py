@@ -139,7 +139,7 @@ def main():
         print("1. Set your OpenAI API key: export OPENAI_API_KEY='your-key-here'")
         print("2. Install dependencies: pip install -r requirements.txt")
         print("3. Run the API: uvicorn app.main:app --reload --port 8000")
-        print("4. Use the /analyze endpoint with use_llm=true (default)")
+        print("4. Upload a contract to /analyze as multipart form data")
     else:
         print("\n❌ LLM workflow test failed!")
         print("Please check your OpenAI API key and dependencies.")

@@ -30,10 +30,9 @@
    - Embeddings capture semantic meaning, not just keywords
    - Creates a high-dimensional vector representation (typically 1536 dimensions)
 
-5. **Vector Store Persistence**
-   - Embeddings, clause IDs, titles, and texts are stored in a pickle file (`artifacts/tfidf_store.pkl`)
-   - Enables fast retrieval without re-computing embeddings on each request
-   - Vector store maintains: `(retriever, embeddings_matrix, ids, titles, texts)`
+5. **In-Memory Index**
+   - The running process keeps the retriever and embeddings in memory. The index is rebuilt after a restart.
+   - The retriever includes a live provider client. The service does not serialize it to disk.
 
 **Output**: Indexed vector store ready for semantic clause matching.
 
@@ -44,8 +43,8 @@
 **Purpose**: Analyze an uploaded contract against the indexed templates to identify risks and deviations.
 
 #### Step 1: Contract Upload & Preprocessing
-- User uploads contract file (PDF, Word, or Markdown) via multipart form data
-- System extracts file content using `read_text_any()`
+- The request accepts PDF, DOCX, UTF-8 text, or Markdown up to 10 MiB via multipart form data
+- The service uses `read_upload_text()` to extract and validate each upload independently before any provider call
 - Text is normalized (markdown stripped if applicable)
 
 #### Step 2: Contract Clause Extraction
@@ -147,12 +146,11 @@
 #### Components:
 - **Chunker** (`app/rag/chunker.py`): Segment documents into semantic clauses
 - **Retriever** (`app/rag/retriever.py`): Semantic search using vector embeddings
-- **Store** (`app/rag/store.py`): Persistent vector store for template embeddings
 
 #### Technology Stack:
 - **Embedding Model**: OpenAI `text-embedding-3-small` (1536 dimensions)
 - **Similarity Metric**: Cosine similarity between vectors
-- **Storage**: Pickle-based persistence for vector indices
+- **Storage**: In-memory indices for the running process
 
 #### Key Benefits:
 - Semantic understanding beyond keyword matching
@@ -232,12 +230,10 @@
 
 #### Architecture:
 - **In-Memory Index**: Active vector store during runtime
-- **Persistent Storage**: Pickle-based file storage
 - **Lazy Loading**: Templates indexed on-demand if not pre-indexed
 
 #### Storage Format:
-- Tuple: `(retriever, embeddings_matrix, ids, titles, texts)`
-- Enables fast similarity search without re-computation
+- Tuple: `(retriever, embeddings_matrix)`
 - Supports multiple templates in single index
 
 ---
@@ -263,8 +259,8 @@
 
 ## Performance Considerations
 
-1. **Embedding Caching**: Template embeddings stored persistently to avoid re-computation
-2. **Async Operations**: FastAPI async handling for concurrent requests
+1. **Template Setup**: The first valid analysis initializes the in-memory index
+2. **Concurrent Parsing**: Upload extraction runs in a worker thread. The synchronous provider calls can still block the API worker.
 3. **Efficient Vector Operations**: NumPy-based matrix operations for similarity calculations
 4. **Selective LLM Calls**: Embeddings first, then LLM analysis only on matched pairs
 
