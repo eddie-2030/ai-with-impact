@@ -1,11 +1,22 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from typing import List
 import os, csv
 from .services.schemas import IngestProfileRequest, RoleMatch, HealthResponse
 from .services.graph_store import GRAPH
+from .services.utils import ProviderUnavailable
 from .orchestrator.graph import ingest_profile, recommend_roles, plan_gap_actions
 
 app = FastAPI(title="Skills Graph Builder & Gap-to-Role Coach (LLM)", version="1.0.0")
+
+
+@app.exception_handler(ProviderUnavailable)
+async def provider_unavailable(request: Request, error: ProviderUnavailable):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": {"code": error.code, "message": str(error)}},
+    )
+
 
 ROLE_CATALOG_PATH = os.getenv("ROLE_CATALOG_CSV", "data/roles/role_skill_requirements.csv" )
 
@@ -29,7 +40,7 @@ def _read_roles():
 ROLE_CATALOG = _read_roles()
 
 def _load_people_data():
-    """Load people data from the generated files"""
+    """Load local roster metadata without analyzing or sending evidence."""
     import json
     BASE = "data/samples"
     people_path = os.path.join(BASE, "people.jsonl")
@@ -38,23 +49,20 @@ def _load_people_data():
         print("No people.jsonl found; run scripts/generate_synth_data.py first.")
         return
     
-    with open(people_path) as f:
+    with open(people_path, encoding="utf-8") as f:
         for line in f:
-            j = json.loads(line)
-            pid = j["person_id"]
-            proj_path = os.path.join(BASE, "projects", f"{pid}_proj.txt")
-            resu_path = os.path.join(BASE, "resumes", f"{pid}_resume.txt")
-            
-            proj = open(proj_path).read() if os.path.exists(proj_path) else ""
-            resu = open(resu_path).read() if os.path.exists(resu_path) else ""
-            evidence = [t for t in [proj, resu] if t]
-            
-            # Ingest the profile
-            ingest_profile(j, evidence)
-            print(f"Loaded {pid} ({j.get('name','')}) with {len(evidence)} docs.")
+            person = json.loads(line)
+            person_id = person.pop("person_id")
+            GRAPH.upsert_person(person_id, **person)
 
 # Load people data on startup
 _load_people_data()
+
+
+def _require_person(person_id: str):
+    if ("person", person_id) not in GRAPH.G:
+        raise HTTPException(404, "Person not found. Ingest a profile first.")
+
 
 @app.get("/health", response_model=HealthResponse)
 def health():
@@ -74,6 +82,7 @@ def persons():
 
 @app.get("/person/{person_id}/skills")
 def person_skills(person_id: str):
+    _require_person(person_id)
     return GRAPH.get_person_skills(person_id)
 
 @app.post("/ingest/profile")
@@ -84,14 +93,19 @@ def ingest(req: IngestProfileRequest):
 
 @app.get("/roles/matches", response_model=List[RoleMatch])
 def matches(person_id: str, top_k: int = 5):
+    _require_person(person_id)
     if not ROLE_CATALOG: raise HTTPException(500, "Role catalog is empty")
     return recommend_roles(person_id, ROLE_CATALOG, top_k=top_k)
 
 @app.get("/recommendations/{person_id}")
-def recommend(person_id: str, role_id: str = None):
+def recommend(person_id: str, role_id: str | None = None):
+    _require_person(person_id)
     if not role_id:
         best = recommend_roles(person_id, ROLE_CATALOG, top_k=1)
-        if not best: raise HTTPException(404, "No role matches found for this person")
+        if not best:
+            raise HTTPException(404, "No role matches. Ingest skill evidence or choose a role explicitly.")
         role_id = best[0]["role_id"]
+    if ("role", role_id) not in GRAPH.G:
+        raise HTTPException(404, "Role not found.")
     plan = plan_gap_actions(person_id, role_id)
     return {"person_id": person_id, "role_id": role_id, **plan}

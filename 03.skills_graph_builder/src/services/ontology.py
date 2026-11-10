@@ -1,7 +1,7 @@
 import csv, os
 from typing import List, Dict, Tuple
 import numpy as np
-from .utils import embed_texts
+from .utils import ProviderUnavailable, embed_texts
 
 SKILLS_PATH = os.getenv("SKILLS_CSV", "data/ontology/skills.csv")
 
@@ -13,21 +13,28 @@ class Ontology:
         self._emb = None
 
     def load(self):
-        self.skills.clear()
-        self.labels.clear()
-        with open(self.path) as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                self.skills.append(r)
-                self.labels.append(r["canonical_label"])
-        self._emb = embed_texts(self.labels)
+        with open(self.path, encoding="utf-8") as f:
+            self.skills = [row for row in csv.DictReader(f) if row["canonical_label"].strip()]
+        self.labels = [row["canonical_label"] for row in self.skills]
+        self._emb = None
 
     def nearest(self, phrase: str, top_k: int = 1) -> List[Tuple[str, float]]:
-        if self._emb is None:
+        if not self.labels:
             self.load()
-        q = embed_texts([phrase])[0]
-        sims = self._emb @ q
+        if not self.labels or not phrase.strip():
+            return []
+        labels = self.labels
+        embeddings = self._emb
+        if embeddings is None:
+            embeddings = embed_texts(labels)
+            self._emb = embeddings
+        query = embed_texts([phrase])[0]
+        if embeddings.shape[1] != query.shape[0]:
+            raise ProviderUnavailable(
+                "provider_invalid_response", "The provider returned inconsistent embedding dimensions."
+            )
+        sims = embeddings @ query
         idx = np.argsort(-sims)[:top_k]
-        return [(self.labels[i], float(sims[i])) for i in idx]
+        return [(labels[i], float(sims[i])) for i in idx]
 
 ONTOLOGY = Ontology()

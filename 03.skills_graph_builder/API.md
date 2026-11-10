@@ -1,181 +1,36 @@
-# API Documentation
+# Skills Graph Builder API
 
-## Base URL
-```
-http://localhost:8000
-```
+Run the API locally at `http://127.0.0.1:8000`. See [README.md](README.md) for setup and offline tests.
 
-## Endpoints
+| Endpoint | Response or action | Provider use |
+| --- | --- | --- |
+| `GET /health` | Returns `{"status":"ok"}` when the API process is running | None |
+| `GET /roles` | Lists role IDs, titles, levels, and skill requirements | None |
+| `GET /persons` | Lists bundled roster entries and profiles ingested in this process | None |
+| `GET /person/{person_id}/skills` | Lists current skill edges for a known person. Unprocessed profiles return an empty list | None |
+| `POST /ingest/profile` | Extracts and records skills for submitted evidence | Chat and embeddings |
+| `GET /roles/matches?person_id=p100&top_k=3` | Returns `role_id`, `title`, `level`, and cosine `score` in ranked order. Profiles without skills return an empty list | Embeddings for profiles with skills |
+| `GET /recommendations/p100?role_id=r_data_analyst` | Returns `person_id`, `role_id`, `gaps`, `actions`, and `rationale` | Select a role explicitly to skip model calls. Omitting it uses matching first |
 
-### Health Check
-```http
-GET /health
-```
-**Response:**
+## Ingest a profile
+
 ```json
 {
-  "status": "ok"
+  "profile": {"person_id": "example-1", "name": "Synthetic example"},
+  "evidence": [{"source": "project", "text": "Built a Python service and queried records with SQL."}]
 }
 ```
 
-### Get All Roles
-```http
-GET /roles
-```
-**Response:**
+A successful response includes `person_id` and `skills_added`. A request with no nonblank evidence stores only profile metadata and returns an empty `skills_added` list. A failed provider call during ingestion leaves the stored profile, skill edges, and evidence vectors untouched.
+
+## Errors
+
+An unknown person or role returns HTTP 404. Asking for an automatic plan before a profile has any skills also returns 404. The health endpoint checks the API process independently of provider availability.
+
+A missing key, timed-out provider call, rate limit, or other provider error returns HTTP 503 for the affected request. The response contains `detail.code` and `detail.message`. For example:
+
 ```json
-[
-  {
-    "role_id": "r_data_analyst",
-    "title": "Data Analyst",
-    "level": "IC3",
-    "skills": [
-      {
-        "skill_id": "sql",
-        "label": "SQL",
-        "weight": 0.8,
-        "must_have": true
-      }
-    ]
-  }
-]
+{"detail":{"code":"provider_not_configured","message":"Set OPENAI_API_KEY on the server to enable model requests."}}
 ```
 
-### Get All People
-```http
-GET /persons
-```
-**Response:**
-```json
-[
-  {
-    "person_id": "p100",
-    "name": "Morgan Lopez",
-    "org_unit": "Customer",
-    "location": "NYC",
-    "role_current": "ML Engineer"
-  }
-]
-```
-
-### Get Person's Skills
-```http
-GET /person/{person_id}/skills
-```
-**Example:** `GET /person/p100/skills`
-
-**Response:**
-```json
-[
-  {
-    "skill_id": "python",
-    "label": "Python",
-    "confidence": 0.95,
-    "source": "project"
-  }
-]
-```
-
-### Get Role Matches for Person
-```http
-GET /roles/matches?person_id={person_id}&top_k={number}
-```
-**Example:** `GET /roles/matches?person_id=p100&top_k=5`
-
-**Response:**
-```json
-[
-  {
-    "role_id": "r_ml_eng",
-    "title": "ML Engineer",
-    "match_score": 0.85,
-    "missing_skills": ["docker"],
-    "strengths": ["python", "mlops"]
-  }
-]
-```
-
-### Get Learning Recommendations
-```http
-GET /recommendations/{person_id}?role_id={role_id}
-```
-**Example:** `GET /recommendations/p100?role_id=r_ml_eng`
-
-**Response:**
-```json
-{
-  "person_id": "p100",
-  "role_id": "r_ml_eng",
-  "gap_analysis": {
-    "missing_skills": ["docker", "kubernetes"],
-    "learning_plan": [
-      {
-        "skill": "docker",
-        "priority": "high",
-        "estimated_hours": 20,
-        "resources": ["Docker documentation", "Hands-on labs"]
-      }
-    ]
-  }
-}
-```
-
-### Ingest New Profile
-```http
-POST /ingest/profile
-```
-**Request Body:**
-```json
-{
-  "profile": {
-    "person_id": "p200",
-    "name": "John Doe",
-    "org_unit": "Engineering",
-    "location": "San Francisco",
-    "role_current": "Software Engineer"
-  },
-  "evidence": [
-    {
-      "text": "Built microservices using Python and Docker",
-      "type": "project"
-    }
-  ]
-}
-```
-
-**Response:**
-```json
-{
-  "person_id": "p200",
-  "skills_added": [
-    {
-      "skill_id": "python",
-      "confidence": 0.9
-    }
-  ]
-}
-```
-
-## Error Responses
-
-### 404 Not Found
-```json
-{
-  "detail": "Person not found"
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-  "detail": "Role catalog is empty"
-}
-```
-
-## Rate Limits
-- No rate limits currently implemented
-- OpenAI API calls are subject to OpenAI's rate limits
-
-## Authentication
-- No authentication required for local development
-- API key required for OpenAI services (configured via environment variables)
+Handle the error code and display the message. The API does not issue random rankings when the provider fails.
