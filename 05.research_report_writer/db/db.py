@@ -1,13 +1,14 @@
 # db/db.py
 from __future__ import annotations
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ARRAY, Float, Boolean, ForeignKey, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session
 from sqlalchemy.dialects.postgresql import JSONB
 from contextlib import contextmanager
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/research_writer")
 
 engine = create_engine(DATABASE_URL, echo=False)
