@@ -1,10 +1,10 @@
 # Product Requirements Document (PRD)
-## Code Security Reviewer - Multi-Agent Code Review & Auto-Rewrite System
+## Code Security Reviewer
 
 **Document Version:** 1.0  
 **Date:** January 2025  
 **Owner:** Senior AI Product Manager  
-**Status:** Active
+**Status:** Product design and roadmap. See the [README](README.md) for the current local demo, verified behavior, and limits.
 
 ---
 
@@ -26,7 +26,7 @@
 
 ## Executive Summary
 
-**Code Security Reviewer** is an enterprise-grade AI-powered code review system that uses multiple specialized agents to analyze code for security vulnerabilities, performance issues, and quality problems, with automatic code rewriting capabilities. The system employs an agentic workflow where specialized AI agents work autonomously to identify issues and generate improved code.
+**Code Security Reviewer** uses specialized agents to flag potential security, performance, and quality issues. With a model configured, it can propose code changes for a developer to inspect and test.
 
 ### Problem Statement
 
@@ -46,8 +46,8 @@ A multi-agent code review system that:
 - Analyzes code for security vulnerabilities (OWASP Top 10, CWE)
 - Detects performance issues (N+1 queries, inefficient algorithms)
 - Checks code quality (maintainability, best practices)
-- Automatically rewrites code to fix issues
-- Provides confidence-based auto-apply or suggestion workflow
+- Proposes changes for individual findings
+- Requires manual review of every proposal
 - Includes test cases for easy demonstration and learning
 
 ### Business Value
@@ -56,7 +56,7 @@ A multi-agent code review system that:
 - **Performance**: Optimize code automatically
 - **Quality**: Enforce code standards consistently
 - **Efficiency**: Reduce manual review time by 70%+
-- **Learning**: Developers learn from automatic fixes
+- **Learning**: Developers learn from proposed changes and their explanations
 - **Scalability**: Review code at scale with consistent quality
 
 ---
@@ -65,7 +65,7 @@ A multi-agent code review system that:
 
 ### Vision Statement
 
-To revolutionize code review by providing an autonomous multi-agent system that identifies security vulnerabilities, performance issues, and quality problems, and automatically fixes them, enabling development teams to ship secure, efficient, and maintainable code faster.
+Help developers spot and triage security, performance, and maintainability issues earlier in code review.
 
 ### Strategic Goals
 
@@ -83,8 +83,8 @@ To revolutionize code review by providing an autonomous multi-agent system that 
 ### Competitive Advantages
 
 - **Multi-Agent Architecture**: Specialized agents for different analysis types
-- **Auto-Rewrite**: Automatically fixes code issues (not just identifies)
-- **Confidence-Based**: Smart decision-making on when to auto-apply vs. suggest
+- **Proposed Changes**: Offers candidate replacements alongside the original source
+- **Validation Status**: Shows whether Python syntax was checked
 - **Test Cases Included**: Easy demonstration and learning with example code
 - **Comprehensive Analysis**: Security, performance, and quality in one system
 
@@ -97,7 +97,7 @@ To revolutionize code review by providing an autonomous multi-agent system that 
 Transform code review from manual, time-intensive process to automated, scalable system by providing:
 
 1. **Comprehensive Analysis**: Security, performance, and quality analysis in one pass
-2. **Automatic Fixes**: Code rewriting with confidence-based application
+2. **Proposed Changes**: Code rewriting for manual review
 3. **Learning Tool**: Test cases demonstrate secure/efficient vs. insecure/inefficient code
 4. **Developer-Friendly**: Easy-to-use dashboard with test case examples
 
@@ -127,11 +127,8 @@ Transform code review from manual, time-intensive process to automated, scalable
 - **LLM Analysis**: Generates quality recommendations
 
 #### 5. Code Rewriter Agent
-- **Automatic Fixes**: Generates improved code versions
-- **Security Fixes**: Fixes SQL injection, XSS, hardcoded secrets
-- **Performance Optimization**: Optimizes algorithms, adds eager loading
-- **Quality Improvements**: Refactors code for maintainability
-- **Confidence Scoring**: Calculates confidence for each rewrite
+- **Proposals**: Generates candidate replacements targeting individual security, performance, or quality findings
+- **Syntax Check**: Compiles Python proposals without executing them
 
 #### 6. Review Coordinator
 - **Summary Generation**: Synthesizes all findings
@@ -185,7 +182,7 @@ Transform code review from manual, time-intensive process to automated, scalable
 
 **How They Use the Product**:
 - **Daily**: Review code before merging PRs
-- **Ongoing**: Use auto-rewrite to fix common issues
+- **Ongoing**: Review and test proposed changes for common issues
 - **Weekly**: Review performance and quality metrics
 - **Monthly**: Update code standards and rules
 
@@ -318,30 +315,19 @@ Transform code review from manual, time-intensive process to automated, scalable
 
 ### FR5: Code Rewriting
 
-#### FR5.1: Automatic Code Rewriting
-- **Requirement**: System MUST generate rewritten code
-- **Acceptance Criteria**:
-  - Generates improved code for each finding
-  - Preserves original functionality
-  - Fixes security vulnerabilities
-  - Optimizes performance issues
-  - Improves code quality
+#### FR5.1: Generate Proposals
+- With model assistance enabled, request a complete replacement addressing a finding.
+- Discard malformed, truncated, and unchanged responses.
+- Show the submitted and proposed source side by side.
 
-#### FR5.2: Confidence Scoring
-- **Requirement**: System MUST calculate confidence for rewrites
-- **Acceptance Criteria**:
-  - Confidence score range: 0-100
-  - High confidence (≥90%): Auto-apply safe fixes
-  - Medium confidence (70-89%): Suggest as PR
-  - Low confidence (<70%): Flag for manual review
+#### FR5.2: Check Python Syntax
+- Compile Python proposals without executing the generated source.
+- Discard proposals that fail to compile or leave the Python AST unchanged.
+- Mark other languages unchecked.
 
-#### FR5.3: Rewrite Modes
-- **Requirement**: System MUST support multiple rewrite modes
-- **Acceptance Criteria**:
-  - Auto-apply mode for high-confidence fixes
-  - Suggest mode for PR generation
-  - Review mode for manual approval
-  - Configurable thresholds
+#### FR5.3: Require Manual Review
+- Label all proposals for manual review. Developers verify behavior and security with their project's tests and checks before applying changes.
+- The reviewer never executes or applies generated source.
 
 #### FR5.4: Explanation Generation
 - **Requirement**: System MUST explain rewrites
@@ -614,8 +600,8 @@ Results: Findings + Rewrites + Recommendations
 
 #### Code Analysis
 - **AST Parsing**: ast (built-in)
-- **Security Scanning**: bandit, safety
-- **Code Quality**: pylint
+- **Security Scanning**: built-in pattern checks
+- **Code Quality**: built-in heuristics
 
 ---
 
@@ -627,7 +613,7 @@ Results: Findings + Rewrites + Recommendations
 
 - Multi-agent architecture implemented
 - Security, performance, quality analysis
-- Code rewriting with confidence scoring
+- Review-only proposals with Python syntax checks
 - Test cases (Python and SQL)
 - FastAPI REST API
 - Streamlit dashboard
@@ -707,7 +693,7 @@ Results: Findings + Rewrites + Recommendations
 
 **Mitigation**:
 - Tune detection patterns based on feedback
-- Implement confidence scoring
+- Evaluate finding confidence against labeled examples
 - Allow pattern whitelisting
 - Provide clear explanations
 
@@ -722,10 +708,9 @@ Results: Findings + Rewrites + Recommendations
 **Probability**: Low
 
 **Mitigation**:
-- Confidence-based application (only high-confidence auto-apply)
-- Test execution before applying (future)
-- Code review before auto-apply
-- Rollback capability
+- Inspect each proposal against the original finding and surrounding code.
+- Run the project's tests and security checks before applying changes.
+- Keep changes in version control for rollback.
 
 ---
 
@@ -766,13 +751,13 @@ Results: Findings + Rewrites + Recommendations
 ### External Dependencies
 
 #### 1. OpenAI API
-- **Required**: Yes (for LLM-powered analysis and rewriting)
+- **Required**: Optional for model-assisted analysis and proposals
 - **Usage**: Security analysis, performance analysis, code rewriting
 - **Assumptions**: API availability, reasonable pricing
 
 #### 2. PostgreSQL Database
-- **Required**: Yes (for storing reviews and findings)
-- **Usage**: Review storage, findings tracking
+- **Required**: Yes, for storing source, review metadata, and summaries
+- **Usage**: Review persistence
 - **Assumptions**: Database hosting available
 
 ---
