@@ -26,31 +26,12 @@ def _normalize_database_url(url: str) -> str:
         return "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
 
-def _create_engine_with_fallback() -> "Any":
-    """
-    Create SQLAlchemy engine.
-    - If DATABASE_URL points to Postgres but the driver isn't installed (common on Python 3.13),
-      fall back to SQLite so the API can still run.
-    """
+def _create_engine() -> "Any":
+    """Use a local SQLite file by default and honor an explicitly configured URL."""
     raw_url = os.getenv("DATABASE_URL", _default_sqlite_url())
     url = _normalize_database_url(raw_url)
 
-    try:
-        if url.startswith("sqlite"):
-            return create_engine(
-                url,
-                connect_args={"check_same_thread": False},
-                pool_pre_ping=True,
-            )
-        return create_engine(url, pool_pre_ping=True)
-    except ModuleNotFoundError as e:
-        # Typical error: No module named 'psycopg2' or missing postgres driver
-        fallback_url = _default_sqlite_url()
-        return create_engine(
-            fallback_url,
-            connect_args={"check_same_thread": False},
-            pool_pre_ping=True,
-        )
+    return create_engine(url, pool_pre_ping=True)
 
 _engine = None
 SessionLocal = sessionmaker(autocommit=False, autoflush=False)
@@ -59,7 +40,7 @@ Base = declarative_base()
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = _create_engine_with_fallback()
+        _engine = _create_engine()
         SessionLocal.configure(bind=_engine)
     return _engine
 

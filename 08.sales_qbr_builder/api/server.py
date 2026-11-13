@@ -1,7 +1,9 @@
 # api/server.py
 from __future__ import annotations
+from contextlib import asynccontextmanager, closing
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import update
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from db.db import (
@@ -9,13 +11,15 @@ from db.db import (
     insert_insight, insert_data_source, insert_action_item, insert_approval, insert_metric,
     create_qbr_run, insert_qbr_event, update_qbr_run_status
 )
-from models.qbr_analyzer import generate_qbr_insights, aggregate_qbr_data
 from orchestrator.qbr_orchestrator import QBROrchestrator, QBRContext
-import os
 import uuid
-import traceback
 
-app = FastAPI(title="Sales/CS QBR Pack Builder API", version="1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(title="Sales/CS QBR Pack Builder API", version="1.0", lifespan=lifespan)
 
 class QBRRequestIn(BaseModel):
     account_id: str
@@ -24,6 +28,12 @@ class QBRRequestIn(BaseModel):
     period_start: date
     period_end: date
     goals: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_period(self):
+        if self.period_end < self.period_start:
+            raise ValueError("Period end must be on or after period start")
+        return self
 
 class QBRApprovalIn(BaseModel):
     action: str = Field(..., pattern="^(approve|request_changes|reject)$")
@@ -53,12 +63,8 @@ class QBRPackOut(BaseModel):
     action_items: List[Dict[str, Any]]
     metrics: List[Dict[str, Any]]
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-
 @app.post("/qbr/generate")
-async def generate_qbr(qbr_request: QBRRequestIn, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+def generate_qbr(qbr_request: QBRRequestIn, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     """Generate a QBR pack for an account"""
     
     request_id = f"qbr-{uuid.uuid4().hex[:8]}"
@@ -78,7 +84,8 @@ async def generate_qbr(qbr_request: QBRRequestIn, background_tasks: BackgroundTa
         })
         
         # Create QBR pack
-        db_pack = create_qbr_pack(s, {
+        s.flush()
+        create_qbr_pack(s, {
             "qbr_request_id": db_request.id,
             "pack_id": pack_id,
             "status": "draft"
@@ -103,7 +110,7 @@ async def generate_qbr(qbr_request: QBRRequestIn, background_tasks: BackgroundTa
         "message": "QBR generation started. Use GET /qbr/{pack_id} to check status."
     }
 
-async def process_qbr_generation(
+def process_qbr_generation(
     request_id: str,
     pack_id: str,
     account_id: str,
@@ -125,67 +132,44 @@ async def process_qbr_generation(
             period_end=period_end,
             goals=goals,
         )
-        orchestrator = QBROrchestrator(ctx)
-
         # Create a durable run record + write step events for auditability
         with session_scope() as s:
             run = create_qbr_run(s, request_id=request_id, pack_id=pack_id)
             qbr_run_id = run.id
 
-        # Execute orchestration and persist events.
-        # Note: we still do the primary persistence (pack/insights/action items) below,
-        # but this records step-level traces aligned with the PRD workflow diagram.
-        result: dict[str, Any] | None = None
-        gen = orchestrator.run()
-        try:
+        orchestrator = QBROrchestrator(ctx)
+
+        # Keep the trace as each stage runs. Publish the pack contents in one transaction.
+        with closing(orchestrator.run()) as gen:
             while True:
                 try:
                     ev = next(gen)
-                    if qbr_run_id is not None:
-                        with session_scope() as s:
-                            insert_qbr_event(
-                                s,
-                                qbr_run_id=qbr_run_id,
-                                step=ev.step,
-                                event_type=ev.event_type,
-                                payload={"ts": ev.ts.isoformat(), **(ev.payload or {})},
-                            )
                 except StopIteration as stop:
                     result = stop.value
                     break
-        except Exception as e:
-            # Persist orchestrator error for debugging
-            if qbr_run_id is not None:
                 with session_scope() as s:
                     insert_qbr_event(
                         s,
                         qbr_run_id=qbr_run_id,
-                        step="orchestrator",
-                        event_type="error",
-                        payload={
-                            "error": str(e),
-                            "traceback": traceback.format_exc(),
-                        },
+                        step=ev.step,
+                        event_type=ev.event_type,
+                        payload={"ts": ev.ts.isoformat(), **ev.payload},
                     )
-                    update_qbr_run_status(s, qbr_run_id, "failed")
-            raise
 
-        crm_data = (result or {}).get("crm_data", {})
-        analytics_data = (result or {}).get("analytics_data", {})
-        support_data = (result or {}).get("support_data", {})
-        aggregated_data = (result or {}).get("aggregated_data", {})
-        insights_result = (result or {}).get("insights_result", {})
+        crm_data = result["crm_data"]
+        analytics_data = result["analytics_data"]
+        support_data = result["support_data"]
+        insights_result = result["insights_result"]
         
         # Store results in database
         with session_scope() as s:
             from db.db import QBRPack, QBRRequest
             
             # Update pack
-            pack = s.query(QBRPack).filter_by(pack_id=pack_id).first()
-            if pack:
-                pack.executive_summary = insights_result.get("executive_summary")
-                pack.account_health_score = insights_result.get("account_health_score")
-                pack.status = "pending_approval"
+            pack = s.query(QBRPack).filter_by(pack_id=pack_id).one()
+            pack.executive_summary = insights_result.get("executive_summary")
+            pack.account_health_score = insights_result.get("account_health_score")
+            pack.status = "pending_approval"
             
             # Store insights
             for insight in insights_result.get("insights", []):
@@ -265,8 +249,7 @@ async def process_qbr_generation(
             pack = s.query(QBRPack).filter_by(pack_id=pack_id).first()
             if pack:
                 pack.status = "failed"
-                # Store error message for quick visibility in UI
-                pack.executive_summary = f"Generation failed: {e}"
+                pack.executive_summary = "QBR generation failed."
             if qbr_run_id is not None:
                 update_qbr_run_status(s, qbr_run_id, "failed")
                 insert_qbr_event(
@@ -274,14 +257,11 @@ async def process_qbr_generation(
                     qbr_run_id=qbr_run_id,
                     step="orchestrator",
                     event_type="error",
-                    payload={
-                        "error": str(e),
-                        "traceback": traceback.format_exc(),
-                    },
+                    payload={"error_type": type(e).__name__},
                 )
 
 @app.get("/qbr/{pack_id}")
-async def get_qbr(pack_id: str) -> Dict[str, Any]:
+def get_qbr(pack_id: str) -> Dict[str, Any]:
     """Get QBR pack by pack_id"""
     from db.db import SessionLocal, QBRPack, Insight, ActionItem, Metric
     
@@ -343,7 +323,7 @@ async def get_qbr(pack_id: str) -> Dict[str, Any]:
 
 
 @app.get("/qbr/{pack_id}/events")
-async def get_qbr_events(pack_id: str) -> Dict[str, Any]:
+def get_qbr_events(pack_id: str) -> Dict[str, Any]:
     """Get orchestrator run events (agent runtime trace) for a QBR pack."""
     from db.db import SessionLocal, QBRRun, QBREvent
 
@@ -371,7 +351,7 @@ async def get_qbr_events(pack_id: str) -> Dict[str, Any]:
         session.close()
 
 @app.post("/qbr/{pack_id}/approve")
-async def approve_qbr(pack_id: str, approval: QBRApprovalIn) -> Dict[str, Any]:
+def approve_qbr(pack_id: str, approval: QBRApprovalIn) -> Dict[str, Any]:
     """Approve, request changes, or reject a QBR pack"""
     from db.db import SessionLocal, QBRPack
     
@@ -381,6 +361,20 @@ async def approve_qbr(pack_id: str, approval: QBRApprovalIn) -> Dict[str, Any]:
         if not pack:
             raise HTTPException(status_code=404, detail="QBR pack not found")
         
+        status = {"approve": "approved", "request_changes": "draft", "reject": "rejected"}[approval.action]
+        changes = {"status": status}
+        if approval.action == "approve":
+            changes["approved_at"] = datetime.utcnow()
+        elif approval.action == "request_changes":
+            changes["version"] = QBRPack.version + 1
+        updated = session.execute(
+            update(QBRPack)
+            .where(QBRPack.id == pack.id, QBRPack.status == "pending_approval")
+            .values(**changes)
+        )
+        if not updated.rowcount:
+            raise HTTPException(status_code=409, detail="QBR pack is not pending approval")
+
         # Record approval
         insert_approval(session, {
             "qbr_pack_id": pack.id,
@@ -390,21 +384,11 @@ async def approve_qbr(pack_id: str, approval: QBRApprovalIn) -> Dict[str, Any]:
             "revision_notes": approval.revision_notes
         })
         
-        # Update pack status
-        if approval.action == "approve":
-            pack.status = "approved"
-            pack.approved_at = datetime.utcnow()
-        elif approval.action == "request_changes":
-            pack.status = "draft"
-            pack.version += 1
-        elif approval.action == "reject":
-            pack.status = "rejected"
-        
         session.commit()
         
         return {
             "pack_id": pack_id,
-            "status": pack.status,
+            "status": status,
             "action": approval.action,
             "message": f"QBR pack {approval.action}d successfully"
         }
@@ -412,9 +396,9 @@ async def approve_qbr(pack_id: str, approval: QBRApprovalIn) -> Dict[str, Any]:
         session.close()
 
 @app.post("/qbr/{pack_id}/revise")
-async def revise_qbr(pack_id: str, revision: QBRRevisionIn) -> Dict[str, Any]:
+def revise_qbr(pack_id: str, revision: QBRRevisionIn) -> Dict[str, Any]:
     """Request revisions to a QBR pack"""
-    from db.db import SessionLocal, QBRPack
+    from db.db import SessionLocal, QBRPack, QBRRequest
     
     session = SessionLocal()
     try:
@@ -422,6 +406,10 @@ async def revise_qbr(pack_id: str, revision: QBRRevisionIn) -> Dict[str, Any]:
         if not pack:
             raise HTTPException(status_code=404, detail="QBR pack not found")
         
+        request = session.get(QBRRequest, pack.qbr_request_id) if pack.qbr_request_id is not None else None
+        if request is not None and request.status == "processing":
+            raise HTTPException(status_code=409, detail="QBR generation is still processing")
+
         pack.status = "draft"
         pack.version += 1
         session.commit()

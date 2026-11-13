@@ -4,7 +4,7 @@ import os
 import json
 from typing import Dict, List, Any, Optional
 from datetime import date, timedelta
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, FiniteFloat, Field, ValidationError
 MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 PROMPT_TEMPLATE = """Analyze the following aggregated data for a Quarterly Business Review (QBR) and generate structured insights.
@@ -78,16 +78,16 @@ class InsightModel(BaseModel):
 class ActionItemModel(BaseModel):
     description: str
     assignee: Optional[str] = None
-    due_date: Optional[str] = None  # ISO date YYYY-MM-DD
+    due_date: date | None = None
     priority: str = Field("medium", pattern="^(low|medium|high)$")
 
 
 class MetricModel(BaseModel):
     name: str
-    value: float | int | None = None
+    value: FiniteFloat | None = None
     unit: str = ""
-    comparison_value: float | int | None = None
-    change_percent: float | int | None = None
+    comparison_value: FiniteFloat | None = None
+    change_percent: FiniteFloat | None = None
     trend: str = Field("stable", pattern="^(up|down|stable)$")
 
 
@@ -107,7 +107,7 @@ def _get_openai_client():
     global _client
     if _client is None:
         from openai import OpenAI
-        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=30.0, max_retries=1)
     return _client
 
 def _heuristic_qbr_report(
@@ -385,11 +385,11 @@ def generate_qbr_insights(
         # Validate shape via Pydantic (reliability layer / structured outputs)
         try:
             parsed = QBRResultModel.model_validate(raw)
-            result = parsed.model_dump()
-        except ValidationError as ve:
+            result = parsed.model_dump(mode="json")
+        except ValidationError:
             # If the LLM returns invalid structure/types, fall back to heuristic
             out = _heuristic_qbr_report(account_name, aggregated_data, goals, period_start, period_end)
-            out["error"] = f"Structured output validation failed: {ve.errors()[:3]}"
+            out["error"] = "Structured output validation failed"
             return out
         
         # Ensure all required fields exist (defensive; should already be validated)
@@ -467,8 +467,8 @@ def generate_qbr_insights(
         
         return result
     
-    except Exception as e:
-        # Fallback response: still produce a complete report, attach error for debugging
+    except Exception:
+        # Keep provider details out of the returned report and its trace.
         out = _heuristic_qbr_report(account_name, aggregated_data, goals, period_start, period_end)
-        out["error"] = str(e)
+        out["error"] = "Model-assisted generation failed"
         return out
