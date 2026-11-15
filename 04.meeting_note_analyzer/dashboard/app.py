@@ -1,18 +1,12 @@
 # dashboard/app.py
 import streamlit as st
-import pandas as pd
 import requests
 from datetime import datetime
-import json
+from uuid import uuid4
 
 st.set_page_config(page_title="Meeting Notes Analyzer", layout="wide")
 
-API_URL = st.sidebar.text_input("API URL", value="http://localhost:8000")
-
-def load_meetings():
-    """Load meetings from API (placeholder - would need GET /meetings endpoint)"""
-    # This would fetch from API in production
-    return []
+API_URL = st.sidebar.text_input("API URL", value="http://127.0.0.1:8000").rstrip("/")
 
 def main():
     st.title("📝 Meeting Notes Analyzer")
@@ -23,10 +17,14 @@ def main():
     with tab1:
         st.header("Analyze a Meeting")
         
-        meeting_id = st.text_input("Meeting ID", value=f"meeting-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+        if "default_meeting_id" not in st.session_state:
+            st.session_state["default_meeting_id"] = f"meeting-{uuid4().hex}"
+            st.session_state["default_meeting_time"] = datetime.now()
+        meeting_id = st.text_input("Meeting ID", value=st.session_state["default_meeting_id"])
         title = st.text_input("Meeting Title", placeholder="e.g., Q4 Planning Meeting")
-        date = st.date_input("Meeting Date", value=datetime.now().date())
-        time = st.time_input("Meeting Time", value=datetime.now().time())
+        default_time = st.session_state["default_meeting_time"]
+        date = st.date_input("Meeting Date", value=default_time.date())
+        time = st.time_input("Meeting Time", value=default_time.time())
         
         participants = st.text_area(
             "Participants (one per line)",
@@ -68,7 +66,7 @@ def main():
                 
                 # Display results
                 st.subheader("Summary")
-                st.write(result.get("summary", "No summary available"))
+                st.text(result.get("summary") or "No summary available")
                 
                 # Action Items
                 if result.get("action_items"):
@@ -84,26 +82,33 @@ def main():
                 if result.get("decisions"):
                     st.subheader("Decisions")
                     for dec in result["decisions"]:
-                        st.write(f"• **{dec.get('decision_text', 'N/A')}**")
+                        st.text(dec.get("decision_text") or "")
                         if dec.get("rationale"):
-                            st.caption(f"Rationale: {dec.get('rationale')}")
+                            st.text(dec["rationale"])
                 
                 # Topics
                 if result.get("topics"):
                     st.subheader("Key Topics")
                     for topic in result["topics"]:
-                        st.write(f"• {topic.get('topic_text', 'N/A')}")
+                        st.text(topic.get("topic_text") or "")
                 
                 # Follow-ups
                 if result.get("follow_ups"):
                     st.subheader("Follow-up Items")
                     for fu in result["follow_ups"]:
-                        st.write(f"• **{fu.get('item', 'N/A')}**")
-                        st.caption(f"Suggested timeline: {fu.get('suggested_timeline', 'Not specified')}")
+                        st.text(fu.get("item") or "")
+                        st.text(f"Suggested timeline: {fu.get('suggested_timeline') or 'Not specified'}")
                 
-            except requests.exceptions.RequestException as e:
-                st.error(f"Error calling API: {str(e)}")
-                st.info("Make sure the API server is running at the specified URL")
+            except requests.exceptions.HTTPError as error:
+                messages = {
+                    409: "This meeting ID is already in use. Reuse the original input or enter a new ID.",
+                    422: "Check the meeting ID, date, and transcript.",
+                    502: "The model returned an unusable analysis.",
+                    503: "The model is unavailable. Check the API configuration and try again.",
+                }
+                st.error(messages.get(error.response.status_code, "The API could not analyze the meeting."))
+            except requests.exceptions.RequestException:
+                st.error("Could not reach the API. Check the server and API URL.")
     
     with tab2:
         st.header("View Meeting Results")
@@ -127,14 +132,12 @@ def main():
             # Action Items Table
             if result.get("action_items"):
                 st.subheader("Action Items")
-                df_ai = pd.DataFrame(result["action_items"])
-                st.dataframe(df_ai, use_container_width=True)
+                st.dataframe(result["action_items"], width="stretch")
             
             # Decisions Table
             if result.get("decisions"):
                 st.subheader("Decisions")
-                df_dec = pd.DataFrame(result["decisions"])
-                st.dataframe(df_dec, use_container_width=True)
+                st.dataframe(result["decisions"], width="stretch")
         else:
             st.info("No meeting analysis available. Analyze a meeting in the 'Analyze Meeting' tab.")
     

@@ -1,8 +1,7 @@
 # db/db.py
 from __future__ import annotations
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ARRAY, Float, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session
 from contextlib import contextmanager
 from datetime import datetime
 import os
@@ -29,6 +28,16 @@ class Meeting(Base):
     decisions = relationship("Decision", back_populates="meeting", cascade="all, delete-orphan")
     topics = relationship("Topic", back_populates="meeting", cascade="all, delete-orphan")
     participant_contributions = relationship("ParticipantContribution", back_populates="meeting", cascade="all, delete-orphan")
+    follow_ups = relationship("FollowUp", order_by="FollowUp.id", cascade="all, delete-orphan")
+
+class FollowUp(Base):
+    __tablename__ = "meeting_follow_ups"
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    item = Column(Text, nullable=False)
+    reason = Column(Text)
+    suggested_timeline = Column(Text)
 
 class ActionItem(Base):
     __tablename__ = "action_items"
@@ -98,7 +107,7 @@ def session_scope():
         session.close()
 
 def upsert_meeting(session: Session, meeting_data: dict) -> Meeting:
-    """Create or update a meeting"""
+    """Create or update a meeting and populate its ID within the current transaction."""
     meeting = session.query(Meeting).filter_by(meeting_ext_id=meeting_data["meeting_ext_id"]).first()
     if not meeting:
         meeting = Meeting(**meeting_data)
@@ -106,28 +115,32 @@ def upsert_meeting(session: Session, meeting_data: dict) -> Meeting:
     else:
         for key, value in meeting_data.items():
             setattr(meeting, key, value)
+    session.flush()
     return meeting
 
 def insert_action_item(session: Session, action_item_data: dict) -> ActionItem:
-    """Insert an action item"""
+    """Insert and flush an action item without committing the transaction."""
     action_item = ActionItem(**action_item_data)
     session.add(action_item)
+    session.flush()
     return action_item
 
 def insert_decision(session: Session, decision_data: dict) -> Decision:
-    """Insert a decision"""
+    """Insert and flush a decision without committing the transaction."""
     decision = Decision(**decision_data)
     session.add(decision)
+    session.flush()
     return decision
 
 def insert_topic(session: Session, topic_data: dict) -> Topic:
-    """Insert a topic"""
+    """Insert and flush a topic without committing the transaction."""
     topic = Topic(**topic_data)
     session.add(topic)
+    session.flush()
     return topic
 
 def insert_participant_contribution(session: Session, contribution_data: dict) -> ParticipantContribution:
-    """Insert or update participant contribution"""
+    """Insert or update and flush a contribution within the current transaction."""
     contribution = session.query(ParticipantContribution).filter_by(
         meeting_id=contribution_data["meeting_id"],
         participant_name=contribution_data["participant_name"]
@@ -139,7 +152,8 @@ def insert_participant_contribution(session: Session, contribution_data: dict) -
     else:
         contribution.contribution_count += contribution_data.get("contribution_count", 0)
         contribution.word_count += contribution_data.get("word_count", 0)
-    
+
+    session.flush()
     return contribution
 
 

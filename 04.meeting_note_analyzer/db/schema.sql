@@ -52,4 +52,14 @@ CREATE INDEX IF NOT EXISTS idx_decisions_meeting ON decisions(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_topics_meeting ON topics(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
 
+CREATE TABLE IF NOT EXISTS meeting_follow_ups (
+    id SERIAL PRIMARY KEY,
+    meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    item TEXT NOT NULL,
+    reason TEXT,
+    suggested_timeline TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_meeting_follow_ups_meeting_id ON meeting_follow_ups(meeting_id);
+
 
