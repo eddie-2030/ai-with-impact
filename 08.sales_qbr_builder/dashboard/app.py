@@ -1,14 +1,18 @@
 # dashboard/app.py
 import streamlit as st
 import httpx
-from datetime import date, datetime
+from datetime import date
+from html import escape
 from typing import Dict, Any, List
-import json
 import os
 import time
-from datetime import datetime as _dt
+from streamlit.errors import StreamlitSecretNotFoundError
 
-API_BASE_URL = st.secrets.get("API_BASE_URL", os.getenv("API_BASE_URL", "http://localhost:8000"))
+api_default = os.getenv("API_BASE_URL", "http://127.0.0.1:8001")
+try:
+    API_BASE_URL = st.secrets.get("API_BASE_URL", api_default)
+except StreamlitSecretNotFoundError:
+    API_BASE_URL = api_default
 
 st.set_page_config(
     page_title="Sales and Customer Success Quarterly Business Review Pack Builder",
@@ -19,14 +23,6 @@ st.set_page_config(
 APP_TITLE = "Sales and Customer Success Quarterly Business Review Pack Builder"
 st.title(APP_TITLE)
 st.caption("Generate professional QBR packs from CRM, product analytics, and support signals with structured insights and an action plan.")
-
-# Debug banner to confirm you're on the latest UI + which API it is calling
-try:
-    _mtime = os.path.getmtime(__file__)
-    _build = _dt.fromtimestamp(_mtime).strftime("%Y-%m-%d %H:%M:%S")
-except Exception:
-    _build = "unknown"
-st.caption(f"UI build: {_build} | API_BASE_URL: {API_BASE_URL}")
 
 st.markdown(
     """
@@ -49,9 +45,7 @@ div[data-testid="stMetricLabel"] p { font-weight: 600; }
 
 def _api_health() -> Dict[str, Any] | None:
     try:
-        # NOTE: In some local Python environments, httpx may raise PermissionError while
-        # creating an SSL context even for plain HTTP requests. `verify=False` avoids that.
-        r = httpx.get(f"{API_BASE_URL}/health", timeout=2.0, verify=False)
+        r = httpx.get(f"{API_BASE_URL}/health", timeout=2.0)
         if r.status_code == 200:
             return r.json()
         return {"status": "unhealthy", "http_status": r.status_code}
@@ -66,7 +60,7 @@ def _pill(label: str, tone: str = "neutral") -> str:
         "bad": ("#991b1b", "rgba(153, 27, 27, 0.10)"),
     }
     fg, bg = colors.get(tone, colors["neutral"])
-    return f"<span style='color:{fg}; background:{bg}; padding:2px 10px; border-radius:999px; font-size:0.85rem; font-weight:600;'>{label}</span>"
+    return f"<span style='color:{fg}; background:{bg}; padding:2px 10px; border-radius:999px; font-size:0.85rem; font-weight:600;'>{escape(label)}</span>"
 
 def _format_number(value: Any, decimals: int = 0) -> str:
     if value is None:
@@ -102,7 +96,7 @@ def _render_qbr_pack(pack_id: str, qbr: Dict[str, Any]) -> None:
     st.markdown(
         f"<div class='qbr-card'><div style='display:flex; justify-content:space-between; align-items:center;'>"
         f"<div><div style='font-size:1.05rem; font-weight:700;'>QBR Pack</div>"
-        f"<div style='color:rgba(17,24,39,0.7); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace;'>{pack_id}</div>"
+        f"<div style='color:rgba(17,24,39,0.7); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace;'>{escape(pack_id)}</div>"
         f"</div><div>{_pill(status.replace('_',' ').title(), tone)}</div></div></div>",
         unsafe_allow_html=True,
     )
@@ -117,7 +111,7 @@ def _render_qbr_pack(pack_id: str, qbr: Dict[str, Any]) -> None:
         st.metric("Account Health Score", f"{float(health_score):.0%}")
 
     st.subheader("Executive Summary")
-    st.write(qbr.get("executive_summary", "No summary available"))
+    st.text(qbr.get("executive_summary") or "No summary available")
 
     st.subheader("Insights")
     insights = qbr.get("insights", [])
@@ -133,7 +127,7 @@ def _render_qbr_pack(pack_id: str, qbr: Dict[str, Any]) -> None:
             st.caption("No wins identified.")
         for win in wins:
             with st.expander(f"{win.get('title', 'Win')}"):
-                st.write(win.get("description", ""))
+                st.text(win.get("description") or "")
                 st.caption(f"Impact: {win.get('impact_score', 0):.0%} | Confidence: {win.get('confidence_score', 0):.0%}")
 
     with tab2:
@@ -141,7 +135,7 @@ def _render_qbr_pack(pack_id: str, qbr: Dict[str, Any]) -> None:
             st.caption("No risks identified.")
         for risk in risks:
             with st.expander(f"{risk.get('title', 'Risk')}"):
-                st.write(risk.get("description", ""))
+                st.text(risk.get("description") or "")
                 st.caption(f"Impact: {risk.get('impact_score', 0):.0%} | Confidence: {risk.get('confidence_score', 0):.0%}")
 
     with tab3:
@@ -149,7 +143,7 @@ def _render_qbr_pack(pack_id: str, qbr: Dict[str, Any]) -> None:
             st.caption("No opportunities identified.")
         for opp in opportunities:
             with st.expander(f"{opp.get('title', 'Opportunity')}"):
-                st.write(opp.get("description", ""))
+                st.text(opp.get("description") or "")
                 st.caption(f"Impact: {opp.get('impact_score', 0):.0%} | Confidence: {opp.get('confidence_score', 0):.0%}")
 
     st.subheader("Action Plan")
@@ -189,10 +183,10 @@ def _render_qbr_pack(pack_id: str, qbr: Dict[str, Any]) -> None:
         st.caption("No metrics available.")
 
 def _poll_for_pack(pack_id: str, timeout_s: int = 90, interval_s: float = 2.0) -> Dict[str, Any] | None:
-    deadline = time.time() + timeout_s
+    deadline = time.monotonic() + timeout_s
     last = None
-    while time.time() < deadline:
-        r = httpx.get(f"{API_BASE_URL}/qbr/{pack_id}", timeout=10.0, verify=False)
+    while time.monotonic() < deadline:
+        r = httpx.get(f"{API_BASE_URL}/qbr/{pack_id}", timeout=10.0)
         if r.status_code == 200:
             last = r.json()
             status = last.get("status")
@@ -267,7 +261,6 @@ if page == "Generate QBR":
                             "goals": goals
                         },
                         timeout=30.0,
-                        verify=False,
                     )
                     response.raise_for_status()
                     result = response.json()
@@ -299,7 +292,7 @@ elif page == "View QBR":
     if pack_id:
         with st.spinner("Loading QBR pack..."):
             try:
-                response = httpx.get(f"{API_BASE_URL}/qbr/{pack_id}", timeout=10.0, verify=False)
+                response = httpx.get(f"{API_BASE_URL}/qbr/{pack_id}", timeout=10.0)
                 response.raise_for_status()
                 qbr = response.json()
 
@@ -323,7 +316,6 @@ elif page == "View QBR":
                                         "feedback": feedback
                                     },
                                     timeout=10.0,
-                                    verify=False,
                                 )
                                 response.raise_for_status()
                                 st.success(f"QBR pack {action}d successfully!")
