@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Tuple
 import os, json
@@ -7,17 +8,21 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from app.utils.io import read_text_any, markdown_to_text
+from app.utils.io import (
+    MAX_UPLOAD_BYTES,
+    DocumentTooLarge,
+    InvalidDocument,
+    UnsupportedDocument,
+    markdown_to_text,
+    read_text_any,
+    read_upload_text,
+)
 from app.rag.chunker import split_into_clauses
-from app.rag.retriever import build_index, search, LLMRetriever
-from app.rag.store import VectorStore
-# Removed old rule-based analyzers - now using LLM agent
+from app.rag.retriever import build_index, search
 from app.analyzers.llm_risk_agent import LLMRiskAgent
 from app.adapters.llm_adapter import LLMAdapter
-from app.models.schemas import AnalysisRequest, AnalysisResult, ClauseComparison
 
 DATA_DIR = os.environ.get('DATA_DIR', 'data')
-INDEX_PATH = os.environ.get('INDEX_PATH', 'artifacts/tfidf_store.pkl')
 
 app = FastAPI(title="Procurement Contract Analyzer", version="0.1.0")
 
@@ -26,7 +31,7 @@ TEMPLATE_REGISTRY = {
     "standard_terms": os.path.join(DATA_DIR, "templates", "standard_terms.md"),
 }
 
-vector_store = VectorStore(INDEX_PATH)
+template_index = None
 
 # Initialize LLM components
 try:
@@ -53,24 +58,17 @@ def load_templates() -> Dict[str, Dict]:
 TEMPLATES = load_templates()
 
 def build_template_index(templates: Dict[str, Dict]):
-    # flatten into ids, titles, texts
-    ids, titles, texts = [], [], []
-    for tname, t in templates.items():
-        for cid_title, body in t["clauses"]:
-            ids.append(f"{tname}::{cid_title}")
-            titles.append(cid_title)
-            texts.append(body)
-    
-    # Use LLM embeddings
-    retriever, embeddings = build_index(texts, llm_adapter)
-    vector_store.save((retriever, embeddings, ids, titles, texts))
-    vector_store.index = (retriever, embeddings, ids, titles, texts)
+    global template_index
+    texts = [body for template in templates.values() for _, body in template["clauses"]]
+    # The retriever contains a live SDK client. Keep it in memory.
+    template_index = build_index(texts, llm_adapter)
 
 @app.post('/ingest')
 def ingest():
     global TEMPLATES
-    TEMPLATES = load_templates()
-    build_template_index(TEMPLATES)
+    templates = load_templates()
+    build_template_index(templates)
+    TEMPLATES = templates
     return {"ok": True, "templates": list(TEMPLATES.keys()), "clauses_indexed": sum(len(t["clauses"]) for t in TEMPLATES.values())}
 
 def grade_band(score: float) -> str:
@@ -81,25 +79,33 @@ def grade_band(score: float) -> str:
 @app.post('/analyze')
 async def analyze_contract(template_name: str = Form(default="master_service_agreement"),
                            file: UploadFile = File(...)):
+    try:
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        contract_text = await run_in_threadpool(read_upload_text, content, file.filename)
+    except DocumentTooLarge as exc:
+        return JSONResponse({"error": str(exc)}, status_code=413)
+    except UnsupportedDocument as exc:
+        return JSONResponse({"error": str(exc)}, status_code=415)
+    except InvalidDocument as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+
+    contract_text = markdown_to_text(contract_text)
+    contract_clauses = [(title, body) for title, body in split_into_clauses(contract_text) if body]
+    if not contract_clauses:
+        return JSONResponse({"error": "The document does not contain readable contract clauses."}, status_code=422)
+
+    if not TEMPLATES:
+        return JSONResponse({"error": "No templates loaded"}, status_code=400)
+    tpl = TEMPLATES.get(template_name)
+    if not tpl:
+        return JSONResponse({"error": f"Unknown template '{template_name}'"}, status_code=400)
+
     if not llm_available:
         return JSONResponse({
             "error": "LLM not available. Please set OPENAI_API_KEY in .env file or environment variables."
         }, status_code=500)
-    
-    if vector_store.index is None:
-        if not TEMPLATES:
-            return JSONResponse({"error": "No templates loaded"}, status_code=400)
+    if template_index is None:
         build_template_index(TEMPLATES)
-
-    content = await file.read()
-    contract_text = read_text_any(content, filename=file.filename)
-    contract_text = markdown_to_text(contract_text)
-    contract_clauses = split_into_clauses(contract_text)
-
-    # Get template
-    tpl = TEMPLATES.get(template_name)
-    if not tpl:
-        return JSONResponse({"error": f"Unknown template '{template_name}'"}, status_code=400)
 
     return await analyze_with_llm_agent(contract_text, contract_clauses, tpl, template_name)
 
@@ -117,9 +123,7 @@ async def analyze_with_llm_agent(contract_text: str, contract_clauses: List[Tupl
         
         # Prepare matched clauses using LLM embeddings
         matched_clauses = []
-        if vector_store.index:
-            retriever, embeddings, ids, titles, texts = vector_store.index
-            
+        if template_index is not None:
             # Build contract index using LLM embeddings
             contract_texts = [c[1] for c in contract_clauses]
             contract_retriever, contract_embeddings = build_index(contract_texts, llm_adapter)
