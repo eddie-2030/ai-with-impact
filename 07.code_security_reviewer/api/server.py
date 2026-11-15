@@ -1,16 +1,21 @@
 # api/server.py
 from __future__ import annotations
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
-from db.db import session_scope, init_db
+from db.db import CodeReview, ReviewSummary, init_db, session_scope
 from orchestrator.code_review_orchestrator import CodeReviewOrchestrator
-import uuid
-
-app = FastAPI(title="Code Security Reviewer API", version="1.0")
 
 orchestrator = CodeReviewOrchestrator()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(title="Code Security Reviewer API", version="1.0", lifespan=lifespan)
 
 class CodeReviewRequest(BaseModel):
     code: str = Field(..., description="Code to review")
@@ -26,12 +31,8 @@ class CodeReviewResponse(BaseModel):
     rewrites: List[Dict[str, Any]]
     summary: Dict[str, Any]
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-
 @app.post("/review", response_model=CodeReviewResponse)
-async def review_code(request: CodeReviewRequest):
+def review_code(request: CodeReviewRequest):
     """Review code for security, performance, and quality issues"""
     
     result = orchestrator.review_code(
@@ -41,19 +42,17 @@ async def review_code(request: CodeReviewRequest):
     )
     
     if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=result.get("error", "Review failed"))
+        raise HTTPException(status_code=500, detail="Code review failed")
     
     # Store in database (simplified - would store all findings)
     with session_scope() as s:
-        from db.db import CodeReview, ReviewSummary
-        
         review = CodeReview(
             review_id=result["review_id"],
             code_content=request.code,
             language=request.language,
             file_path=request.file_path,
             status="completed",
-            completed_at=datetime.utcnow()
+            completed_at=datetime.now(UTC).replace(tzinfo=None)
         )
         s.add(review)
         s.flush()

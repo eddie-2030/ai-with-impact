@@ -41,7 +41,7 @@ class SecurityAgent(BaseAgent):
         
         findings = scan_results.get("findings", [])
         if not findings:
-            return "No security vulnerabilities detected. Code appears secure."
+            return "The configured security checks reported no findings."
         
         findings_summary = "\n".join([
             f"- {f['finding_type']} ({f['severity']}): {f['description']}"

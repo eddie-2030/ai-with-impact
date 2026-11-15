@@ -1,12 +1,11 @@
 # dashboard/app.py
 import streamlit as st
 import requests
-import os
 from pathlib import Path
 
 st.set_page_config(page_title="Code Security Reviewer", layout="wide")
 
-API_URL = st.sidebar.text_input("API URL", value="http://localhost:8000")
+API_URL = st.sidebar.text_input("API URL", value="http://127.0.0.1:8000")
 
 # Get test cases directory
 TEST_CASES_DIR = Path(__file__).parent.parent / "data" / "test_cases"
@@ -55,7 +54,7 @@ def get_test_cases() -> dict:
 
 def main():
     st.title("🔒 Code Security Reviewer")
-    st.markdown("Multi-Agent AI System for Code Review, Security Analysis & Auto-Rewrite")
+    st.markdown("Static checks for security, performance, and quality, with optional AI proposals.")
     
     tab1, tab2, tab3 = st.tabs(["Test Cases", "Custom Code", "Review History"])
     
@@ -233,11 +232,15 @@ def display_review_results(result: dict, language: str):
     # Code Rewrites
     rewrites = result.get("rewrites", [])
     if rewrites:
-        st.subheader("🔧 Code Rewrites")
-        st.markdown("Automatically generated code fixes:")
+        st.subheader("Proposed changes")
+        st.caption("Manual review required. Check each proposal against the finding and run your own tests before applying it.")
         
         for i, rewrite in enumerate(rewrites, 1):
-            with st.expander(f"Rewrite #{i}: {rewrite.get('finding_type', 'Unknown')} (Confidence: {rewrite.get('confidence_score', 0):.1f}%)"):
+            with st.expander(f"Proposal {i} · {rewrite.get('finding_type', 'Unknown')}"):
+                if rewrite.get("validation_status") == "syntax_checked":
+                    st.caption("Python syntax checked. Behavior unverified.")
+                else:
+                    st.caption("Syntax and behavior unverified.")
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -245,22 +248,16 @@ def display_review_results(result: dict, language: str):
                     st.code(rewrite.get("original_code", ""), language=language)
                 
                 with col2:
-                    rewrite_mode = rewrite.get("rewrite_mode", "suggest")
-                    mode_color = {
-                        "auto_apply": "🟢 Auto-Apply",
-                        "suggest": "🟡 Suggest",
-                        "review": "🔴 Review"
-                    }
-                    st.markdown(f"**Rewritten Code:** {mode_color.get(rewrite_mode, rewrite_mode)}")
+                    st.markdown("**Proposed code**")
                     st.code(rewrite.get("rewritten_code", ""), language=language)
                 
                 if rewrite.get("explanation"):
-                    st.info(f"**Explanation:** {rewrite['explanation']}")
+                    st.text(rewrite["explanation"])
     
     # Summary
     if summary.get("summary"):
         st.subheader("📝 Review Summary")
-        st.write(summary["summary"])
+        st.text(summary["summary"])
     
     if summary.get("recommendations"):
         st.subheader("💡 Recommendations")

@@ -1,5 +1,5 @@
 # agents/review_coordinator.py
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from .base_agent import BaseAgent
 
 class ReviewCoordinator(BaseAgent):
@@ -167,7 +167,7 @@ Provide a brief 2-3 sentence summary of the code review results."""
             recommendations.append("Improve code quality and maintainability.")
         
         if not recommendations:
-            return "Code is in good shape. Continue following best practices."
+            return "The configured checks reported no findings."
         
         return " ".join(recommendations)
 
