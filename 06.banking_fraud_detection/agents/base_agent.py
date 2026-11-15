@@ -14,7 +14,8 @@ class BaseAgent(ABC):
         self.allowed_tools = allowed_tools
         self.tools = {tool: tool_registry.get_tool(tool) 
                      for tool in allowed_tools if tool_registry.get_tool(tool)}
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) if os.getenv("OPENAI_API_KEY") else None
+        api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        self.client = OpenAI(api_key=api_key, timeout=15.0, max_retries=0) if api_key else None
         self.model = os.getenv("LLM_MODEL", "gpt-4o-mini")
     
     def use_tool(self, tool_name: str, *args, **kwargs) -> Any:

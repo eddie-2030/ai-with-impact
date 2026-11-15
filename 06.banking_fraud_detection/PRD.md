@@ -4,7 +4,7 @@
 **Document Version:** 1.0  
 **Date:** January 2025  
 **Owner:** Senior AI Product Manager  
-**Status:** Active
+**Status:** Product design and roadmap. See the [README](README.md) for the prototype's verified behavior and scoring limits.
 
 ---
 

@@ -2,6 +2,7 @@
 import json
 from typing import Dict, List, Optional
 from .base_agent import BaseAgent
+from transaction_context import history_for_transaction, normalize_timestamp, within_window
 
 class InvestigationAgent(BaseAgent):
     """Agent responsible for deep investigation of high-risk transactions"""
@@ -16,16 +17,18 @@ class InvestigationAgent(BaseAgent):
     def execute(self, task: Dict, context: Optional[Dict] = None) -> Dict:
         """Perform deep investigation"""
         transaction = task.get("transaction", {})
+        event_time = normalize_timestamp(transaction.get("timestamp"))
+        transaction = dict(transaction, timestamp=event_time.isoformat())
         risk_assessment = task.get("risk_assessment", {})
-        user_history = task.get("user_history", [])
+        user_history = history_for_transaction(transaction, task.get("user_history", []))
         
         # Gather additional context
         context_data = {
-            "transaction_count_24h": self._count_recent_transactions(user_history, hours=24),
-            "transaction_count_7d": self._count_recent_transactions(user_history, hours=168),
-            "total_amount_24h": self._sum_recent_amounts(user_history, hours=24),
-            "unique_locations_7d": len(set(t.get("location", "") for t in user_history if self._is_recent(t.get("timestamp"), hours=168))),
-            "unique_devices_30d": len(set(t.get("device_id", "") for t in user_history if self._is_recent(t.get("timestamp"), hours=720)))
+            "transaction_count_24h": self._count_recent_transactions(user_history, hours=24, event_time=event_time),
+            "transaction_count_7d": self._count_recent_transactions(user_history, hours=168, event_time=event_time),
+            "total_amount_24h": self._sum_recent_amounts(user_history, hours=24, event_time=event_time),
+            "unique_locations_7d": len(set(t.get("location", "") for t in user_history if self._is_recent(t.get("timestamp"), hours=168, event_time=event_time))),
+            "unique_devices_30d": len(set(t.get("device_id", "") for t in user_history if self._is_recent(t.get("timestamp"), hours=720, event_time=event_time)))
         }
         
         # Generate investigation report using LLM
@@ -40,60 +43,18 @@ class InvestigationAgent(BaseAgent):
             "status": "completed"
         }
     
-    def _count_recent_transactions(self, history: List[Dict], hours: int) -> int:
+    def _count_recent_transactions(self, history: List[Dict], hours: int, event_time) -> int:
         """Count transactions within specified hours"""
-        from datetime import datetime, timedelta
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
-        
-        count = 0
-        for t in history:
-            timestamp = t.get("timestamp")
-            if timestamp:
-                try:
-                    if isinstance(timestamp, str):
-                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    else:
-                        dt = timestamp
-                    if dt.replace(tzinfo=None) >= cutoff:
-                        count += 1
-                except:
-                    pass
-        return count
+        return sum(self._is_recent(t.get("timestamp"), hours, event_time) for t in history)
     
-    def _sum_recent_amounts(self, history: List[Dict], hours: int) -> float:
+    def _sum_recent_amounts(self, history: List[Dict], hours: int, event_time) -> float:
         """Sum transaction amounts within specified hours"""
-        from datetime import datetime, timedelta
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
-        
-        total = 0.0
-        for t in history:
-            timestamp = t.get("timestamp")
-            if timestamp:
-                try:
-                    if isinstance(timestamp, str):
-                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    else:
-                        dt = timestamp
-                    if dt.replace(tzinfo=None) >= cutoff:
-                        total += float(t.get("amount", 0))
-                except:
-                    pass
-        return total
+        return sum(float(t.get("amount", 0)) for t in history
+                   if self._is_recent(t.get("timestamp"), hours, event_time))
     
-    def _is_recent(self, timestamp, hours: int) -> bool:
+    def _is_recent(self, timestamp, hours: int, event_time) -> bool:
         """Check if timestamp is within specified hours"""
-        from datetime import datetime, timedelta
-        if not timestamp:
-            return False
-        try:
-            if isinstance(timestamp, str):
-                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            else:
-                dt = timestamp
-            cutoff = datetime.utcnow() - timedelta(hours=hours)
-            return dt.replace(tzinfo=None) >= cutoff
-        except:
-            return False
+        return within_window(timestamp, event_time, hours * 3600, include_cutoff=True)
     
     def _generate_investigation_report(self, transaction: Dict, risk_assessment: Dict,
                                        context: Dict) -> str:
@@ -128,9 +89,9 @@ Provide a concise investigation report (3-4 sentences) summarizing key findings 
                 temperature=0.2,
                 max_tokens=300
             )
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Investigation report error: {str(e)}"
+            return response.choices[0].message.content or "Investigation report unavailable"
+        except Exception:
+            return "Investigation report unavailable from the model provider"
     
     def _generate_recommendation(self, risk_assessment: Dict) -> str:
         """Generate investigation recommendation"""

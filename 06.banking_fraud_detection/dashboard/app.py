@@ -1,16 +1,15 @@
 # dashboard/app.py
 import streamlit as st
 import requests
-from datetime import datetime
-import pandas as pd
+from urllib.parse import quote
 
 st.set_page_config(page_title="Banking Fraud Detection", layout="wide")
 
-API_URL = st.sidebar.text_input("API URL", value="http://localhost:8000")
+API_URL = st.sidebar.text_input("API URL", value="http://127.0.0.1:8000").rstrip("/")
 
 def main():
     st.title("🏦 Banking Fraud Detection System")
-    st.markdown("Multi-Agent AI System for Real-Time Fraud Detection")
+    st.caption("Explore rule-based fraud signals with synthetic transactions.")
     
     tab1, tab2, tab3, tab4 = st.tabs(["Process Transaction", "View Alerts", "Transaction Details", "Dashboard"])
     
@@ -21,6 +20,7 @@ def main():
         
         with col1:
             user_id = st.text_input("User ID", value="user-123")
+            supplied_id = st.text_input("Submission ID (optional)", help="Reuse this ID when checking a previous submission.")
             amount = st.number_input("Amount ($)", min_value=0.01, value=100.00, step=0.01)
             merchant = st.text_input("Merchant", value="Online Store")
             merchant_category = st.selectbox("Merchant Category", 
@@ -36,6 +36,7 @@ def main():
         
         if st.button("Process Transaction", type="primary"):
             payload = {
+                "transaction_id": supplied_id or None,
                 "user_id": user_id,
                 "amount": amount,
                 "merchant": merchant,
@@ -44,22 +45,22 @@ def main():
                 "device_id": device_id,
                 "transaction_type": transaction_type,
                 "payment_method": payment_method,
-                "timestamp": datetime.utcnow().isoformat()
             }
             
             try:
                 with st.spinner("Processing transaction through fraud detection agents..."):
-                    response = requests.post(f"{API_URL}/transactions", json=payload, timeout=30)
+                    response = requests.post(f"{API_URL}/transactions", json=payload, timeout=40)
                     response.raise_for_status()
                     result = response.json()
                 
                 st.success("Transaction processed!")
+                st.text(f"Transaction ID: {result['transaction_id']}")
                 st.session_state['last_transaction'] = result
                 
                 # Display results
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Risk Score", f"{result.get('risk_score', 0):.1f}/100")
+                    st.metric("Risk Score", f"{result.get('risk_score', 0):.2f}/100")
                 with col2:
                     st.metric("Risk Level", result.get('risk_level', 'unknown').upper())
                 with col3:
@@ -84,6 +85,12 @@ def main():
                     st.write(f"**Alert Type:** {alert.get('alert_type', 'unknown').replace('_', ' ').title()}")
                     st.write(f"**Description:** {alert.get('description', 'No description')}")
                 
+            except requests.exceptions.HTTPError as error:
+                messages = {
+                    409: "This submission ID already exists. Load it in Transaction Details.",
+                    422: "Check the transaction fields and submit again.",
+                }
+                st.error(messages.get(error.response.status_code, "The API could not assess the transaction."))
             except requests.exceptions.RequestException as e:
                 st.error(f"Error calling API: {str(e)}")
                 st.info("Make sure the API server is running at the specified URL")
@@ -101,7 +108,7 @@ def main():
             filter_severity = st.selectbox("Filter by Severity",
                 ["all", "low", "medium", "high", "critical"])
         
-        if st.button("Load Alerts") or True:
+        if st.button("Load Alerts"):
             try:
                 params = {}
                 if filter_status != "all":
@@ -117,8 +124,7 @@ def main():
                     st.success(f"Found {len(alerts)} alerts")
                     
                     # Display alerts in a table
-                    df = pd.DataFrame(alerts)
-                    st.dataframe(df, use_container_width=True)
+                    st.dataframe(alerts, width="stretch")
                     
                     # Summary metrics
                     col1, col2, col3, col4 = st.columns(4)
@@ -147,7 +153,7 @@ def main():
         
         if st.button("Load Transaction") and transaction_id:
             try:
-                response = requests.get(f"{API_URL}/transactions/{transaction_id}", timeout=30)
+                response = requests.get(f"{API_URL}/transactions/{quote(transaction_id, safe='')}", timeout=30)
                 response.raise_for_status()
                 result = response.json()
                 
@@ -170,11 +176,11 @@ def main():
                 if result.get('risk_assessment'):
                     st.subheader("Risk Assessment")
                     risk = result['risk_assessment']
-                    st.metric("Risk Score", f"{risk.get('risk_score', 0):.1f}/100")
+                    st.metric("Risk Score", f"{risk.get('risk_score', 0):.2f}/100")
                     st.metric("Risk Level", risk.get('risk_level', 'unknown').upper())
                     if risk.get('analysis'):
                         st.write("**Analysis:**")
-                        st.write(risk['analysis'])
+                        st.text(risk["analysis"])
                 
                 # Alerts
                 if result.get('alerts'):

@@ -73,7 +73,8 @@ class RiskCalculatorTool(BaseTool):
         }
         total_score += time_risk * 0.1
         
-        # Determine risk level
+        # Alert and transaction status also use the rounded score.
+        total_score = round(total_score, 2)
         if total_score >= 90:
             risk_level = "critical"
         elif total_score >= 80:
@@ -84,7 +85,7 @@ class RiskCalculatorTool(BaseTool):
             risk_level = "low"
         
         return {
-            "risk_score": round(total_score, 2),
+            "risk_score": total_score,
             "risk_level": risk_level,
             "risk_factors": risk_factors
         }
