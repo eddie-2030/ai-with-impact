@@ -3,31 +3,32 @@ import numpy as np
 from ..services.graph_store import GRAPH
 from ..services.utils import embed_texts
 
-def _avg_emb(labels: List[str]) -> np.ndarray:
-    if not labels:
-        return embed_texts([""])[0]
-    vecs = embed_texts(labels)
-    v = vecs.mean(axis=0)
-    return v / (np.linalg.norm(v)+1e-12)
-
-def _role_vec(role_id: str) -> np.ndarray:
-    reqs = GRAPH.get_role_requirements(role_id)
-    labels = [r["label"] for r in reqs]
-    return _avg_emb(labels)
-
-def _person_vec(person_id: str) -> np.ndarray:
-    skills = GRAPH.get_person_skills(person_id)
-    labels = [s["label"] for s in skills]
-    return _avg_emb(labels)
+def _centroid(labels: List[str], embeddings: Dict[str, np.ndarray]) -> np.ndarray:
+    vector = np.mean([embeddings[label] for label in labels], axis=0)
+    return vector / (np.linalg.norm(vector) + 1e-12)
 
 def compute_matches(person_id: str, role_catalog: List[Dict], top_k: int = 5) -> List[Dict]:
-    p = _person_vec(person_id)
+    person_labels = [skill["label"] for skill in GRAPH.get_person_skills(person_id) if skill["label"].strip()]
+    if not person_labels:
+        return []
+
+    role_labels = []
+    for role in role_catalog:
+        requirements = GRAPH.get_role_requirements(role["role_id"])
+        labels = [skill["label"] for skill in requirements if skill["label"].strip()]
+        if labels:
+            role_labels.append((role, labels))
+    if not role_labels:
+        return []
+
+    labels = list(dict.fromkeys(person_labels + [label for _, skills in role_labels for label in skills]))
+    embeddings = dict(zip(labels, embed_texts(labels), strict=True))
+    person_vector = _centroid(person_labels, embeddings)
     out = []
-    for r in role_catalog:
-        rv = _role_vec(r["role_id"])
-        score = float(np.dot(p, rv))
-        out.append({"role_id": r["role_id"], "title": r.get("title","role"), "level": r.get("level"), "score": score})
-    out.sort(key=lambda x: x["score"], reverse=True)
+    for role, skills in role_labels:
+        score = float(np.dot(person_vector, _centroid(skills, embeddings)))
+        out.append({"role_id": role["role_id"], "title": role.get("title", "role"), "level": role.get("level"), "score": score})
+    out.sort(key=lambda match: (-match["score"], match["role_id"]))
     return out[:top_k]
 
 def compute_gap_vector(person_id: str, role_id: str) -> List[Dict]:

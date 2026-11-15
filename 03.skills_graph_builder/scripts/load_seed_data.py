@@ -1,30 +1,49 @@
-import os, json
-from src.orchestrator.graph import ingest_profile
-from src.services.rag import index_document
+"""Send one bundled synthetic profile to the running API."""
 
-BASE = "data/samples"
+import argparse
+import json
+from pathlib import Path
 
-def _read(path):
-    return open(path).read() if os.path.exists(path) else ""
+import requests
+
+SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
+
 
 def main():
-    people_path = os.path.join(BASE,"people.jsonl")
-    if not os.path.exists(people_path):
-        print("No people.jsonl; run scripts/generate_synth_data.py first.")
-        return
-    with open(people_path) as f:
-        for line in f:
-            j = json.loads(line)
-            pid = j["person_id"]
-            proj = _read(os.path.join(BASE,"projects", f"{pid}_proj.txt"))
-            resu = _read(os.path.join(BASE,"resumes", f"{pid}_resume.txt"))
-            evidence = [t for t in [proj, resu] if t]
-            for tag, txt in [("project",proj),("resume",resu)]:
-                if txt:
-                    index_document(f"{pid}_{tag}", txt, {"type":tag,"person_id":pid})
-            ingest_profile(j, evidence)
-            print(f"Ingested {pid} ({j.get('name','')}) with {len(evidence)} docs.")
-    print("Seed ingestion done.")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("person_id", help="ID from the synthetic roster, for example p100")
+    parser.add_argument("--api-url", default="http://127.0.0.1:8000")
+    args = parser.parse_args()
+
+    with (SAMPLES / "people.jsonl").open(encoding="utf-8") as roster:
+        for line in roster:
+            profile = json.loads(line)
+            if profile["person_id"] == args.person_id:
+                break
+        else:
+            parser.error(f"Unknown synthetic person ID: {args.person_id}")
+
+    evidence = []
+    for directory, suffix, source in (
+        ("projects", "proj", "project"),
+        ("resumes", "resume", "resume"),
+    ):
+        path = SAMPLES / directory / f"{args.person_id}_{suffix}.txt"
+        if path.is_file():
+            evidence.append({"text": path.read_text(encoding="utf-8"), "source": source})
+    if not evidence:
+        parser.error(f"No bundled evidence for {args.person_id}")
+
+    try:
+        response = requests.post(
+            f"{args.api_url.rstrip('/')}/ingest/profile",
+            json={"profile": profile, "evidence": evidence},
+            timeout=120,
+        )
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        parser.exit(1, f"Ingest failed: {exc}\n")
+    print(f"Ingested {args.person_id}: {len(response.json()['skills_added'])} skills.")
 
 if __name__ == "__main__":
     main()
