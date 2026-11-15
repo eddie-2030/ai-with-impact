@@ -118,9 +118,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Docker
-.dockerignore
-
 # macOS
 .DS_Store
 .DS_Store?
