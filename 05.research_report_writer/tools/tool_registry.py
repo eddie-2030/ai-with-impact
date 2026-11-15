@@ -2,7 +2,6 @@
 from typing import Dict, Optional
 from .base_tool import BaseTool
 from .web_search import WebSearchTool
-from .web_scraper import WebScraperTool
 from .citation_formatter import APACitationFormatter
 
 class ToolRegistry:
@@ -15,7 +14,6 @@ class ToolRegistry:
     def _initialize_default_tools(self):
         """Initialize default tools"""
         self.register_tool("web_search", WebSearchTool())
-        self.register_tool("scrape_webpage", WebScraperTool())
         self.register_tool("format_apa_citation", APACitationFormatter())
     
     def register_tool(self, name: str, tool: BaseTool):
