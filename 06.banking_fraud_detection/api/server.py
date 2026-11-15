@@ -1,147 +1,136 @@
-# api/server.py
 from __future__ import annotations
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-from db.db import session_scope, init_db, upsert_user, insert_transaction, insert_risk_assessment, insert_fraud_alert
-from orchestrator.fraud_orchestrator import FraudOrchestrator
+
+import logging
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Any
 
-app = FastAPI(title="Banking Fraud Detection API", version="1.0")
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, FiniteFloat
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
+from api.transaction_input import TransactionIn
+from db.db import (
+    Transaction, User, init_db, insert_fraud_alert, insert_risk_assessment,
+    load_account_context, session_scope,
+)
+from orchestrator.fraud_orchestrator import FraudOrchestrator
+from transaction_context import normalize_timestamp
+
+logger = logging.getLogger(__name__)
 orchestrator = FraudOrchestrator()
 
-class TransactionIn(BaseModel):
-    transaction_id: Optional[str] = None
-    user_id: str
-    amount: float = Field(..., gt=0)
-    currency: str = Field(default="USD")
-    merchant: Optional[str] = None
-    merchant_category: Optional[str] = None
-    location: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    device_id: Optional[str] = None
-    ip_address: Optional[str] = None
-    transaction_type: str = Field(default="purchase")
-    payment_method: str = Field(default="card")
-    timestamp: Optional[str] = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Banking Fraud Detection API", version="1.0", lifespan=lifespan)
+
 
 class TransactionResponse(BaseModel):
     transaction_id: str
     status: str
-    risk_score: float
+    risk_score: FiniteFloat
     risk_level: str
-    alert: Optional[Dict[str, Any]]
-    patterns_detected: List[str]
+    alert: dict[str, Any] | None
+    patterns_detected: list[str]
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request: Request, error: RequestValidationError):
+    details = [{key: item[key] for key in ("loc", "msg", "type")} for item in error.errors()]
+    return JSONResponse(status_code=422, content={"detail": details})
+
+
+def duplicate_transaction() -> HTTPException:
+    return HTTPException(status_code=409, detail="Transaction ID already exists. Retrieve the original by ID.")
+
 
 @app.post("/transactions", response_model=TransactionResponse)
-async def process_transaction(transaction: TransactionIn):
-    """Process a transaction for fraud detection"""
-    
+def process_transaction(transaction: TransactionIn):
+    """Assess and persist one new transaction."""
     transaction_id = transaction.transaction_id or str(uuid.uuid4())
-    timestamp = transaction.timestamp or datetime.utcnow().isoformat()
-    
-    transaction_dict = {
-        "transaction_id": transaction_id,
-        "user_id": transaction.user_id,
-        "amount": transaction.amount,
-        "currency": transaction.currency,
-        "merchant": transaction.merchant,
-        "merchant_category": transaction.merchant_category,
-        "location": transaction.location,
-        "latitude": transaction.latitude,
-        "longitude": transaction.longitude,
-        "device_id": transaction.device_id,
-        "ip_address": transaction.ip_address,
-        "transaction_type": transaction.transaction_type,
-        "payment_method": transaction.payment_method,
-        "timestamp": timestamp
-    }
-    
-    # Get user history (simplified - in production, query database)
-    user_history = []  # Would query from database
-    
-    # Get user profile (simplified - in production, query database)
-    user_profile = {"risk_profile": "low"}  # Would query from database
-    
-    # Process transaction through orchestrator
+    timestamp = transaction.timestamp or datetime.now(UTC).isoformat()
+    data = transaction.model_dump()
+    data.update(transaction_id=transaction_id, timestamp=timestamp)
+
+    with session_scope() as session:
+        existing = session.scalar(
+            select(Transaction.id).where(Transaction.transaction_id == transaction_id)
+        )
+        if existing is not None:
+            raise duplicate_transaction()
+        user_history, user_profile = load_account_context(
+            session, transaction.user_id, timestamp, transaction_id,
+        )
+
     result = orchestrator.process_transaction(
-        transaction_dict,
+        {**data, "amount": float(transaction.amount)},
         user_history=user_history,
         user_profile=user_profile,
-        min_risk_score=70.0
+        min_risk_score=70.0,
     )
-    
-    # Store in database
-    with session_scope() as s:
-        # Upsert user
-        user = upsert_user(s, {
-            "user_id": transaction.user_id,
-            "account_status": "active",
-            "risk_profile": "low"
-        })
-        s.flush()
-        
-        # Insert transaction
-        db_transaction = insert_transaction(s, {
-            "transaction_id": transaction_id,
-            "user_id": transaction.user_id,
-            "amount": transaction.amount,
-            "currency": transaction.currency,
-            "merchant": transaction.merchant,
-            "merchant_category": transaction.merchant_category,
-            "location": transaction.location,
-            "latitude": transaction.latitude,
-            "longitude": transaction.longitude,
-            "device_id": transaction.device_id,
-            "ip_address": transaction.ip_address,
-            "transaction_type": transaction.transaction_type,
-            "payment_method": transaction.payment_method,
-            "timestamp": datetime.fromisoformat(timestamp.replace('Z', '+00:00')),
-            "status": result.get("status", "pending")
-        })
-        s.flush()
-        
-        # Insert risk assessment
-        insert_risk_assessment(s, {
-            "transaction_id": transaction_id,
-            "risk_score": result.get("risk_score", 0.0),
-            "risk_level": result.get("risk_level", "low"),
-            "risk_factors": result.get("risk_factors", {}),
-            "agent_analysis": result.get("analysis", "")
-        })
-        
-        # Insert alert if generated
-        if result.get("alert"):
-            alert_data = result["alert"]
-            insert_fraud_alert(s, {
-                "alert_id": alert_data.get("alert_id"),
-                "transaction_id": transaction_id,
-                "user_id": transaction.user_id,
-                "alert_type": alert_data.get("alert_type"),
-                "severity": alert_data.get("severity"),
-                "risk_score": alert_data.get("risk_score", 0.0),
-                "description": alert_data.get("description"),
-                "status": "open"
-            })
-    
-    return TransactionResponse(
+    if result.get("status") == "error":
+        logger.error("Transaction assessment failed")
+        raise HTTPException(status_code=500, detail="Transaction assessment failed")
+
+    response = TransactionResponse(
         transaction_id=transaction_id,
-        status=result.get("status", "approved"),
-        risk_score=result.get("risk_score", 0.0),
-        risk_level=result.get("risk_level", "low"),
+        status=result["status"],
+        risk_score=result["risk_score"],
+        risk_level=result["risk_level"],
         alert=result.get("alert"),
-        patterns_detected=result.get("patterns_detected", [])
+        patterns_detected=result.get("patterns_detected", []),
     )
 
-@app.get("/transactions/{transaction_id}")
-async def get_transaction(transaction_id: str):
+    with session_scope() as session:
+        # Both unique IDs are arbitrated in PostgreSQL. A losing request rolls back
+        # even a newly inserted user. Existing account attributes stay intact.
+        session.execute(insert(User).values(user_id=transaction.user_id).on_conflict_do_nothing(
+            index_elements=[User.user_id],
+        ))
+        saved_id = session.scalar(
+            insert(Transaction)
+            .values(**{**data, "timestamp": normalize_timestamp(timestamp).replace(tzinfo=None),
+                       "status": response.status})
+            .on_conflict_do_nothing(index_elements=[Transaction.transaction_id])
+            .returning(Transaction.id)
+        )
+        if saved_id is None:
+            raise duplicate_transaction()
+
+        insert_risk_assessment(session, {
+            "transaction_id": transaction_id,
+            "risk_score": response.risk_score,
+            "risk_level": response.risk_level,
+            "risk_factors": result.get("risk_factors", {}),
+            "agent_analysis": result.get("analysis", ""),
+        })
+
+        if response.alert:
+            alert = response.alert
+            insert_fraud_alert(session, {
+                "alert_id": alert["alert_id"],
+                "transaction_id": transaction_id,
+                "user_id": transaction.user_id,
+                "alert_type": alert["alert_type"],
+                "severity": alert["severity"],
+                "risk_score": alert["risk_score"],
+                "description": alert["description"],
+                "status": "open",
+            })
+
+    return response
+
+@app.get("/transactions/{transaction_id:path}")
+def get_transaction(transaction_id: str):
     """Get transaction details and fraud analysis"""
     from db.db import SessionLocal, Transaction, RiskAssessment, FraudAlert
     
@@ -160,7 +149,7 @@ async def get_transaction(transaction_id: str):
             "amount": float(db_transaction.amount),
             "merchant": db_transaction.merchant,
             "location": db_transaction.location,
-            "timestamp": db_transaction.timestamp.isoformat(),
+            "timestamp": normalize_timestamp(db_transaction.timestamp).isoformat(),
             "status": db_transaction.status,
             "risk_assessment": {
                 "risk_score": risk_assessment.risk_score if risk_assessment else None,
@@ -181,7 +170,7 @@ async def get_transaction(transaction_id: str):
         session.close()
 
 @app.get("/alerts")
-async def get_alerts(status: Optional[str] = None, severity: Optional[str] = None):
+def get_alerts(status: str | None = None, severity: str | None = None):
     """Get fraud alerts with optional filtering"""
     from db.db import SessionLocal, FraudAlert
     

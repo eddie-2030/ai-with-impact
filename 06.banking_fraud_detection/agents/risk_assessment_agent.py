@@ -67,7 +67,11 @@ Provide a brief risk analysis (2-3 sentences) explaining why this transaction is
                 temperature=0.2,
                 max_tokens=200
             )
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Risk analysis error: {str(e)}"
+            text = response.choices[0].message.content
+            if isinstance(text, str) and text.strip() and "\x00" not in text:
+                text.encode("utf-8")
+                return text
+            return "Risk analysis unavailable"
+        except Exception:
+            return "Risk analysis unavailable from the model provider"
 

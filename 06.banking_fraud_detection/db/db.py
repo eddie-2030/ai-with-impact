@@ -1,12 +1,12 @@
 # db/db.py
 from __future__ import annotations
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ARRAY, Float, Boolean, ForeignKey, DECIMAL, Time
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session
 from sqlalchemy.dialects.postgresql import JSONB
 from contextlib import contextmanager
 from datetime import datetime
 from decimal import Decimal
+from transaction_context import normalize_timestamp
 import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/fraud_detection")
@@ -178,6 +178,45 @@ def upsert_user(session: Session, user_data: dict) -> User:
         for key, value in user_data.items():
             setattr(user, key, value)
     return user
+
+def load_account_context(session: Session, user_id: str, timestamp, transaction_id: str):
+    """Load only this account's prior events and its persisted risk/profile data.
+
+    TIMESTAMP columns contain UTC-naive values; convert the event to that same
+    convention for the database predicate, then expose aware UTC history.
+    """
+    event_time = normalize_timestamp(timestamp).replace(tzinfo=None)
+    user = session.query(User).filter_by(user_id=user_id).first()
+    profile = {
+        "user_id": user_id,
+        "risk_profile": user.risk_profile if user else "low",
+        "account_status": user.account_status if user else "active",
+    }
+    if user and user.profile:
+        stored = user.profile
+        profile.update({
+            "avg_transaction_amount": float(stored.avg_transaction_amount) if stored.avg_transaction_amount is not None else None,
+            "typical_merchants": stored.typical_merchants,
+            "typical_locations": stored.typical_locations,
+            "typical_transaction_times": [t.isoformat() for t in stored.typical_transaction_times or []],
+            "spending_pattern": stored.spending_pattern,
+            "device_fingerprints": stored.device_fingerprints,
+        })
+    rows = session.query(Transaction).filter(
+        Transaction.user_id == user_id,
+        Transaction.transaction_id != transaction_id,
+        Transaction.timestamp <= event_time,
+    ).order_by(Transaction.timestamp, Transaction.id).all()
+    fields = (
+        "transaction_id", "user_id", "currency", "merchant", "merchant_category",
+        "location", "latitude", "longitude", "device_id", "ip_address",
+        "transaction_type", "payment_method", "status",
+    )
+    history = [dict(
+        {field: getattr(row, field) for field in fields},
+        amount=float(row.amount), timestamp=normalize_timestamp(row.timestamp).isoformat(),
+    ) for row in rows]
+    return history, profile
 
 def insert_transaction(session: Session, transaction_data: dict) -> Transaction:
     """Insert a transaction"""

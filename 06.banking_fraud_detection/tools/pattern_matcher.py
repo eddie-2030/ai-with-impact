@@ -1,7 +1,7 @@
 # tools/pattern_matcher.py
 from typing import Dict, List, Optional
 from .base_tool import BaseTool
-from datetime import datetime, timedelta
+from transaction_context import history_for_transaction, normalize_timestamp, within_window
 
 class PatternMatcherTool(BaseTool):
     """Tool for matching transactions against fraud patterns"""
@@ -14,6 +14,8 @@ class PatternMatcherTool(BaseTool):
     
     def execute(self, transaction: Dict, user_history: Optional[List[Dict]] = None) -> Dict:
         """Check transaction against fraud patterns"""
+        transaction = dict(transaction, timestamp=normalize_timestamp(transaction.get("timestamp")).isoformat())
+        user_history = history_for_transaction(transaction, user_history)
         patterns_detected = []
         pattern_scores = {}
         
@@ -80,7 +82,7 @@ class PatternMatcherTool(BaseTool):
         # Get recent locations (last 24 hours)
         recent_locations = [
             t.get("location", "") for t in history 
-            if t.get("location") and self._is_recent(t.get("timestamp"))
+            if t.get("location") and self._is_recent(t.get("timestamp"), transaction.get("timestamp"))
         ]
         
         # If location not in recent locations, it's an anomaly
@@ -135,44 +137,16 @@ class PatternMatcherTool(BaseTool):
     
     def _check_off_hours(self, transaction: Dict) -> bool:
         """Check if transaction is during off-hours"""
-        timestamp = transaction.get("timestamp")
-        if not timestamp:
-            return False
-        
-        if isinstance(timestamp, str):
-            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-        else:
-            dt = timestamp
-        
+        dt = normalize_timestamp(transaction.get("timestamp"))
         hour = dt.hour
         # Off-hours: before 6 AM or after 11 PM
         return hour < 6 or hour > 23
     
-    def _is_recent(self, timestamp) -> bool:
-        """Check if timestamp is within last 24 hours"""
-        if not timestamp:
-            return False
-        if isinstance(timestamp, str):
-            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-        else:
-            dt = timestamp
-        return (datetime.utcnow() - dt.replace(tzinfo=None)).total_seconds() < 86400
+    def _is_recent(self, timestamp, event_time) -> bool:
+        """Check the 24 hours preceding this transaction's event time."""
+        return within_window(timestamp, event_time, 86400)
     
     def _is_within_hour(self, timestamp1, timestamp2) -> bool:
-        """Check if two timestamps are within 1 hour"""
-        if not timestamp1 or not timestamp2:
-            return False
-        
-        if isinstance(timestamp1, str):
-            dt1 = datetime.fromisoformat(timestamp1.replace('Z', '+00:00'))
-        else:
-            dt1 = timestamp1
-        
-        if isinstance(timestamp2, str):
-            dt2 = datetime.fromisoformat(timestamp2.replace('Z', '+00:00'))
-        else:
-            dt2 = timestamp2
-        
-        diff = abs((dt1.replace(tzinfo=None) - dt2.replace(tzinfo=None)).total_seconds())
-        return diff < 3600
+        """Check the hour preceding the transaction, excluding future events."""
+        return within_window(timestamp1, timestamp2, 3600)
 

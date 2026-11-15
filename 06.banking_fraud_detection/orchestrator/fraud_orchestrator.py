@@ -1,7 +1,7 @@
 # orchestrator/fraud_orchestrator.py
 import uuid
 from typing import Dict, Optional, List
-from datetime import datetime
+from transaction_context import history_for_transaction, normalize_timestamp
 from agents.transaction_monitor_agent import TransactionMonitorAgent
 from agents.pattern_detection_agent import PatternDetectionAgent
 from agents.risk_assessment_agent import RiskAssessmentAgent
@@ -26,6 +26,8 @@ class FraudOrchestrator:
         transaction_id = transaction.get("transaction_id", str(uuid.uuid4()))
         
         try:
+            transaction = dict(transaction, timestamp=normalize_timestamp(transaction.get("timestamp")).isoformat())
+            user_history = history_for_transaction(transaction, user_history)
             # Step 1: Transaction Monitor Agent
             monitor_task = {"transaction": transaction}
             monitor_result = self.monitor_agent.execute(monitor_task)
